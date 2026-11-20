@@ -87,7 +87,7 @@ else
 fi
 
 # Check runtime images
-for rel in images/kernel/Image images/initramfs.cpio.gz images/qemu_overlay.img images/userdata-provisioned.img \
+for rel in images/kernel/Image images/initramfs.cpio.gz images/qemu_overlay.img \
            images/donor/system.img images/donor/vendor.img images/donor/sys_prod.img images/donor/chip_prod.img images/donor/cust.img; do
     if [ -f "$ROOT/$rel" ]; then
         ok "Image: $rel ($(du -hL "$ROOT/$rel" | awk '{print $1}'))"
@@ -95,6 +95,11 @@ for rel in images/kernel/Image images/initramfs.cpio.gz images/qemu_overlay.img 
         fail "Missing image: $ROOT/$rel"
     fi
 done
+if [ -f "$ROOT/images/userdata-provisioned.img" ]; then
+    ok "Image (optional skip-OOBE): images/userdata-provisioned.img ($(du -hL "$ROOT/images/userdata-provisioned.img" | awk '{print $1}'))"
+else
+    ok "Userdata: fresh 4G sparse ext4 will be auto-initialized on first boot"
+fi
 
 # Check prebuilt / installed dashboard binaries
 for b in bin/harmony-emulator-dashboard dist/harmony-emulator-dashboard-darwin-arm64 dist/harmony-emulator-dashboard-linux-arm64; do

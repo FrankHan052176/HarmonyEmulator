@@ -2,7 +2,7 @@
 # HarmonyEmulator One-Click Installer for macOS arm64 (Apple Silicon) and Linux arm64 (aarch64).
 # Usage:
 #   ./install.sh [--listen 127.0.0.1:18555] [--release v0.1.0] [--images-from <dir|tar.zst|tar.gz>]
-#                [--donor-zip <update_full_base.zip>] [--blank-userdata] [--skip-donor]
+#                [--donor-zip <update_full_base.zip>] [--skip-donor]
 #                [--build] [--skip-deps] [--setup-bridged] [--install-service] [--check]
 set -euo pipefail
 
@@ -16,7 +16,6 @@ RELEASE_TAG="${HMOS7_RELEASE_TAG:-v0.1.0}"
 RELEASE_BASE="${HMOS7_RELEASE_URL:-https://github.com/${RELEASE_REPO}/releases/download/${RELEASE_TAG}}"
 IMAGES_FROM=""
 DONOR_ZIP=""
-BLANK_USERDATA=0
 SKIP_DONOR=0
 FORCE_BUILD=0
 SKIP_DEPS=0
@@ -30,7 +29,6 @@ while [ $# -gt 0 ]; do
         --release) RELEASE_TAG="$2"; RELEASE_BASE="https://github.com/${RELEASE_REPO}/releases/download/${RELEASE_TAG}"; shift 2 ;;
         --images-from) IMAGES_FROM="$2"; shift 2 ;;
         --donor-zip) DONOR_ZIP="$2"; shift 2 ;;
-        --blank-userdata) BLANK_USERDATA=1; shift ;;
         --skip-donor) SKIP_DONOR=1; shift ;;
         --build) FORCE_BUILD=1; shift ;;
         --skip-deps) SKIP_DEPS=1; shift ;;
@@ -160,15 +158,6 @@ if [ ! -f "$ROOT/images/kernel/Image" ] || [ ! -f "$ROOT/images/initramfs.cpio.g
     curl -fL -C - --progress-bar "${RELEASE_BASE}/hmos7-boot-overlay-arm64.tar.gz" -o "$BOOT_TAR"
     tar -xzf "$BOOT_TAR" -C "$ROOT"
     rm -f "$BOOT_TAR"
-fi
-
-# Auto-download pre-provisioned skip-OOBE userdata unless --blank-userdata is passed
-if [ "$BLANK_USERDATA" = "0" ] && [ ! -f "$ROOT/images/userdata-provisioned.img" ]; then
-    UD_TAR="$ROOT/.cache/hmos7-userdata-provisioned-arm64.tar.gz"
-    echo "      Downloading hmos7-userdata-provisioned-arm64.tar.gz (skip-OOBE snapshot, pass --blank-userdata to skip)..."
-    curl -fL -C - --progress-bar "${RELEASE_BASE}/hmos7-userdata-provisioned-arm64.tar.gz" -o "$UD_TAR"
-    tar -xzf "$UD_TAR" -C "$ROOT"
-    rm -f "$UD_TAR"
 fi
 
 # 3. Ensure 5 Huawei Pura 70 Pro+ 7.0.0.107 donor partitions exist (auto-fetch from Huawei public CDN)

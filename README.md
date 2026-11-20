@@ -22,10 +22,10 @@
 `./install.sh` 会自动完成全部环境与镜像准备，无需手动拷贝镜像：
 1. 自动检查并安装 `qemu-system-aarch64` 等依赖；
 2. 自动从本仓库 **GitHub Release (`v0.1.0`)** 下载：
-   - 对应平台的预编译 `harmony-emulator-dashboard-{darwin,linux}-arm64` 二进制；
-   - 自研内核、initramfs、512 MiB `qemu_overlay.img` 与配套自签测试 PKI（`hmos7-boot-overlay-arm64.tar.gz`）；
-   - 已跳过 OOBE 的预置数据分区（`hmos7-userdata-provisioned-arm64.tar.gz`；如想省流量从空白数据分区启动，可追加 `--blank-userdata`）；
+   - 对应平台的预编译 `harmony-emulator-dashboard-{darwin,linux}-arm64` 二进制（约 7 MB）；
+   - 自研内核、initramfs、512 MiB `qemu_overlay.img` 与配套自签测试 PKI（`hmos7-boot-overlay-arm64.tar.gz`，仅 62 MB）；
 3. 自动调用 `scripts/fetch-donor.sh` 从华为官方公开 OTA CDN 拉取 Pura 70 Pro+ `7.0.0.107` 固件包并仅提取校验所需的 5 个只读分区（`system` / `vendor` / `sys_prod` / `chip_prod` / `cust`，逐一校验 SHA-256；如本机已有 `update_full_base.zip` 可传 `--donor-zip <路径>`，如本机已有现成镜像目录可传 `--images-from <路径>`）。
+4. 首次启动实例时自动创建并格式化 4 GiB 稀疏 `userdata.img`（自动持久化，之后每次启动约 11 秒进入桌面）。
 
 ### macOS arm64（Apple Silicon）
 
@@ -62,7 +62,60 @@ sudo ./scripts/setup-bridged-linux.sh
 ./bin/harmony-emulator-dashboard --listen 127.0.0.1:18555
 ```
 
-> **提示**：宿主机准备好对应平台的 `hdc`（加入 `PATH`、放到 `tools/hdc` 或设置 `HMOS7_HDC`）即可控制模拟器。若需自动签名未签名 `.hap`，安装 Java 17+ 并设置 `OHOS_SDK_HOME` / `DEVECO_SDK_HOME`（或将 `hap-sign-tool.jar` 放到 `tools/signing/`）。
+---
+
+## `hdc` 与签名工具 `hap-sign-tool.jar` 获取与放置说明
+
+运行模拟器本身不需要任何专有工具，但与机内通信、执行 Shell、安装 `.hap` 依赖 **`hdc`**，自动签名未签名 `.hap` 依赖 **`hap-sign-tool.jar` + `UnsgnedDebugProfileTemplate.json`**（以及 Java 17+）。
+
+### 1. 工具来源（华为官方 Command Line Tools / DevEco Studio / OpenHarmony SDK）
+
+- **方式 A（推荐，官方命令行工具包）**：
+  前往华为开发者联盟下载对应平台的 **Command Line Tools for HarmonyOS**（Mac ARM64 版或 Linux ARM64/x86_64 版；也可直接从本机已安装的 **DevEco Studio** 内置 SDK 中提取）。解压后工具位于：
+  ```text
+  command-line-tools/sdk/default/openharmony/toolchains/
+  ├── hdc                                   # 按平台区分（macOS arm64 与 Linux arm64 需各自匹配）
+  └── lib/
+      ├── hap-sign-tool.jar                 # 纯 Java 包，macOS / Linux / Windows 全平台完全共用！
+      └── UnsgnedDebugProfileTemplate.json  # 纯文本模板，全平台完全共用！
+  ```
+- **方式 B（开源源码自编译）**：
+  `hdc` 对应 OpenHarmony 开源仓库 [`developtools_hdc`](https://gitee.com/openharmony/developtools_hdc)，`hap-sign-tool.jar` 对应 [`developtools_hapsigner`](https://gitee.com/openharmony/developtools_hapsigner)（Apache-2.0，可直接自行编译出 `Linux arm64` 版 `hdc` 或 `hap-sign-tool.jar`）。
+
+> **关于跨平台共用**：`hap-sign-tool.jar` 和 `UnsgnedDebugProfileTemplate.json` 是纯 Java / JSON 文件，**macOS arm64 与 Linux arm64 可以直接拷贝共用同一份**，只需宿主机安装 Java 17+（`brew install openjdk` 或 `apt install openjdk-17-jre-headless`）。只有 `hdc` 是原生可执行文件，需要分别使用对应操作系统的版本。
+
+### 2. 如何放进项目（任选其一，自动按优先级识别）
+
+#### 方式 1：直接放到项目 `tools/` 目录（最省心，免配环境变量）
+
+```bash
+mkdir -p tools/signing
+
+# 1) 放入当前平台对应的 hdc（macOS arm64 放 mac 版，Linux arm64 放 linux 版）
+cp /path/to/sdk/default/openharmony/toolchains/hdc tools/hdc
+chmod +x tools/hdc
+
+# 2) 放入全平台共用的签名 jar 与模板（从任意已装 SDK 的机器拷贝一份即可）
+cp /path/to/sdk/default/openharmony/toolchains/lib/hap-sign-tool.jar tools/signing/
+cp /path/to/sdk/default/openharmony/toolchains/lib/UnsgnedDebugProfileTemplate.json tools/signing/
+```
+
+#### 方式 2：通过环境变量指向已有 SDK（无需复制文件）
+
+```bash
+# 指向 Command Line Tools 的 sdk 目录（自动同时识别 hdc 与 hap-sign-tool.jar）
+export DEVECO_SDK_HOME="/path/to/command-line-tools/sdk"
+
+# 或分别指定：
+export OHOS_SDK_HOME="/path/to/sdk/default"
+export HMOS7_HDC="/path/to/hdc"
+```
+
+放好后执行体检脚本确认全部绿灯：
+
+```bash
+./scripts/doctor.sh
+```
 
 ---
 
