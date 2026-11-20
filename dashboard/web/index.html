@@ -1,0 +1,742 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>HarmonyEmulatorDashboard · HarmonyOS 7 QEMU</title>
+<style>
+  :root {
+    --bg: #0c0f16;
+    --panel: #141923;
+    --panel-2: #1b2230;
+    --border: #273145;
+    --text: #e6edf7;
+    --muted: #8a99b5;
+    --accent: #3b82f6;
+    --accent-hover: #2563eb;
+    --ok: #22c55e;
+    --warn: #f59e0b;
+    --danger: #ef4444;
+    --mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    --sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Segoe UI", sans-serif;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text); font-family: var(--sans); font-size: 13px; }
+  .app { display: grid; grid-template-rows: 52px 1fr; height: 100vh; overflow: hidden; }
+  header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0 18px; border-bottom: 1px solid var(--border); background: var(--panel);
+    gap: 12px;
+  }
+  .brand { display: flex; align-items: center; gap: 10px; font-weight: 600; font-size: 14px; }
+  .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--muted); display: inline-block; }
+  .dot.ok { background: var(--ok); box-shadow: 0 0 8px rgba(34,197,94,.6); }
+  .dot.warn { background: var(--warn); }
+  .header-meta { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .pill {
+    display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px;
+    border-radius: 999px; background: var(--panel-2); border: 1px solid var(--border);
+    color: var(--muted); font-size: 12px; font-family: var(--mono);
+  }
+  .pill strong { color: var(--text); font-weight: 500; }
+
+  .main { display: grid; grid-template-columns: 410px 1fr; height: 100%; overflow: hidden; }
+  @media (max-width: 960px) { .main { grid-template-columns: 1fr; overflow: auto; } }
+
+  /* Left: Interactive Phone Stage */
+  .stage {
+    display: flex; flex-direction: column; align-items: center; justify-content: flex-start;
+    padding: 14px; border-right: 1px solid var(--border); background: #090c12;
+    overflow-y: auto; gap: 10px;
+  }
+  .stage-bar {
+    width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  }
+  .phone-bezel {
+    position: relative; width: 320px; aspect-ratio: 1080 / 2340;
+    border-radius: 28px; overflow: hidden; background: #000;
+    border: 3px solid #2b354b; box-shadow: 0 18px 48px rgba(0,0,0,.6);
+    user-select: none; touch-action: none; cursor: crosshair; flex-shrink: 0;
+  }
+  .phone-bezel img {
+    width: 100%; height: 100%; object-fit: contain; display: block; pointer-events: none;
+  }
+  .phone-empty {
+    position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center;
+    justify-content: center; gap: 10px; color: var(--muted); text-align: center; padding: 24px;
+  }
+  .coord-hud {
+    position: absolute; bottom: 8px; left: 50%; transform: translateX(-50%);
+    background: rgba(12,15,22,.82); border: 1px solid var(--border); color: #dbeafe;
+    font-family: var(--mono); font-size: 11px; padding: 2px 8px; border-radius: 999px;
+    pointer-events: none; opacity: 0; transition: opacity .15s;
+  }
+  .phone-bezel:hover .coord-hud { opacity: 1; }
+  .ripple {
+    position: absolute; width: 22px; height: 22px; margin: -11px 0 0 -11px;
+    border-radius: 50%; border: 2px solid #60a5fa; background: rgba(59,130,246,.3);
+    pointer-events: none; animation: rip .45s ease-out forwards;
+  }
+  @keyframes rip { from { transform: scale(.4); opacity: 1; } to { transform: scale(2); opacity: 0; } }
+
+  .controls-row {
+    width: 320px; display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px;
+  }
+  .text-row { width: 320px; display: flex; gap: 6px; }
+  .text-row input { flex: 1; }
+
+  /* Right: Workbench */
+  .work { display: flex; flex-direction: column; overflow: hidden; }
+  .cards {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(310px, 1fr));
+    gap: 12px; padding: 14px; border-bottom: 1px solid var(--border);
+    max-height: 46vh; overflow-y: auto;
+  }
+  .card {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
+    padding: 12px 14px; display: flex; flex-direction: column; gap: 10px;
+  }
+  .card h3 {
+    margin: 0; font-size: 13px; font-weight: 600; display: flex; align-items: center;
+    justify-content: space-between; gap: 8px;
+  }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  label.field { display: flex; flex-direction: column; gap: 4px; font-size: 11px; color: var(--muted); }
+  input, select, button {
+    font-family: inherit; font-size: 12px; border-radius: 6px;
+    border: 1px solid var(--border); background: var(--panel-2); color: var(--text);
+    padding: 6px 9px; outline: none;
+  }
+  input:focus, select:focus { border-color: var(--accent); }
+  button { cursor: pointer; font-weight: 500; transition: background .12s, border-color .12s; }
+  button:hover:not(:disabled) { border-color: #475878; background: #222b3d; }
+  button:disabled { opacity: .45; cursor: not-allowed; }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  button.primary:hover:not(:disabled) { background: var(--accent-hover); }
+  button.danger { background: rgba(239,68,68,.15); border-color: rgba(239,68,68,.45); color: #fca5a5; }
+  button.danger:hover:not(:disabled) { background: rgba(239,68,68,.28); }
+  button.ok { background: rgba(34,197,94,.16); border-color: rgba(34,197,94,.45); color: #86efac; }
+
+  .inst-list { display: flex; flex-direction: column; gap: 6px; }
+  .inst-item {
+    display: flex; align-items: center; justify-content: space-between; gap: 8px;
+    padding: 7px 10px; border-radius: 7px; background: var(--panel-2); border: 1px solid var(--border);
+    cursor: pointer;
+  }
+  .inst-item.active { border-color: var(--accent); background: rgba(59,130,246,.12); }
+  .inst-meta { font-family: var(--mono); font-size: 11px; color: var(--muted); }
+
+  /* Tabs & Terminal Output */
+  .tabs {
+    display: flex; align-items: center; gap: 4px; padding: 8px 14px 0;
+    border-bottom: 1px solid var(--border); background: var(--panel);
+  }
+  .tab {
+    padding: 7px 12px; border: 1px solid transparent; border-bottom: none;
+    border-radius: 7px 7px 0 0; background: transparent; color: var(--muted);
+  }
+  .tab.active { background: var(--bg); color: var(--text); border-color: var(--border); }
+  .tab-body { flex: 1; display: flex; flex-direction: column; overflow: hidden; padding: 10px 14px; gap: 8px; }
+  pre.console {
+    flex: 1; margin: 0; padding: 10px 12px; background: #080b10; border: 1px solid var(--border);
+    border-radius: 8px; overflow: auto; font-family: var(--mono); font-size: 11.5px; line-height: 1.48;
+    white-space: pre-wrap; word-break: break-word; color: #cbd5e1;
+  }
+  .toast {
+    position: fixed; right: 16px; bottom: 16px; padding: 9px 14px; border-radius: 8px;
+    background: #1e293b; border: 1px solid var(--border); color: var(--text);
+    box-shadow: 0 10px 28px rgba(0,0,0,.5); font-size: 12px; z-index: 99;
+    opacity: 0; pointer-events: none; transition: opacity .18s;
+  }
+  .toast.show { opacity: 1; }
+  .dropzone {
+    border: 1px dashed var(--border); border-radius: 8px; padding: 10px;
+    text-align: center; color: var(--muted); font-size: 12px; cursor: pointer;
+  }
+  .dropzone.over { border-color: var(--accent); color: var(--text); background: rgba(59,130,246,.08); }
+  .chk { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; color: var(--muted); cursor: pointer; }
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <div class="brand">
+      <span id="healthDot" class="dot"></span>
+      <span>HarmonyEmulatorDashboard</span>
+      <span class="pill">HarmonyOS <strong>7.0.0.107</strong> · Linux 6.6 · QEMU HVF</span>
+    </div>
+    <div class="header-meta">
+      <span class="pill">MCP: <strong id="mcpUrlText">http://127.0.0.1:18555/mcp</strong></span>
+      <button onclick="copyMcpUrl()">复制 MCP 地址</button>
+      <button onclick="refreshStatus()">刷新状态</button>
+    </div>
+  </header>
+
+  <div class="main">
+    <!-- Left: Interactive Phone Viewport -->
+    <section class="stage">
+      <div class="stage-bar">
+        <div class="row">
+          <strong id="activeInstLabel">未选中实例</strong>
+          <span id="streamState" class="pill">离线</span>
+        </div>
+        <div class="row">
+          <select id="fpsSelect" title="实时流帧率" onchange="reconnectStream()">
+            <option value="5" selected>5 FPS</option>
+            <option value="8">8 FPS</option>
+            <option value="2">2 FPS</option>
+            <option value="0">手动截图</option>
+          </select>
+          <button onclick="refreshOneFrame()">单帧</button>
+        </div>
+      </div>
+
+      <div id="phone" class="phone-bezel">
+        <img id="screenImg" alt="HarmonyOS 7 Live Screen" style="display:none" />
+        <div id="phoneEmpty" class="phone-empty">
+          <div style="font-size:28px;opacity:.6">📱</div>
+          <div>启动或选择一个运行中的 HarmonyOS 7 实例</div>
+          <div style="font-size:11px">支持在画面上直接点击（Tap）和拖拽（Swipe）</div>
+        </div>
+        <div id="coordHud" class="coord-hud">0, 0</div>
+      </div>
+
+      <div class="controls-row">
+        <button onclick="sendKey('back')">◀ 返回</button>
+        <button onclick="sendKey('home')">● 桌面</button>
+        <button onclick="sendAct({action:'wake'})">☀ 唤醒解锁</button>
+        <button onclick="sendKey('power')">⏻ 电源</button>
+      </div>
+      <div class="controls-row">
+        <button onclick="sendKey('volume_down')">🔉 音量-</button>
+        <button onclick="sendKey('volume_up')">🔊 音量+</button>
+        <button onclick="sendKey('enter')">↵ 回车</button>
+        <button onclick="downloadPng()">⬇ PNG</button>
+      </div>
+      <div class="text-row">
+        <input id="textInput" placeholder="输入文字发送到当前焦点输入框..." onkeydown="if(event.key==='Enter')sendText()" />
+        <button class="primary" onclick="sendText()">发送</button>
+      </div>
+    </section>
+
+    <!-- Right: Instance / App / Debug Workbench -->
+    <section class="work">
+      <div class="cards">
+        <!-- Instance Management -->
+        <div class="card">
+          <h3>
+            <span>实例管理</span>
+            <button class="danger" onclick="stopAll()">全部停止</button>
+          </h3>
+          <div id="instList" class="inst-list"></div>
+          <div class="grid2">
+            <label class="field">实例名
+              <input id="launchName" value="m2test" placeholder="default / m2test" />
+            </label>
+            <label class="field">显示模式
+              <select id="launchDisplay">
+                <option value="none" selected>none (无头/Web流)</option>
+                <option value="cocoa">cocoa (原生窗口)</option>
+                <option value="vnc">vnc (127.0.0.1:5921)</option>
+              </select>
+            </label>
+            <label class="field">以太网模式
+              <select id="launchNet">
+                <option value="auto" selected>auto (优先桥接 → vmnet)</option>
+                <option value="bridged">bridged (二层桥接 en0)</option>
+                <option value="shared">shared (vmnet 192.168.105.x)</option>
+                <option value="user">user (SLIRP 兜底)</option>
+              </select>
+            </label>
+            <label class="field">双机 LAN (Peer)
+              <input id="launchPeer" value="off" placeholder="off / listen:6666 / connect:6666" />
+            </label>
+            <label class="field">内存 (MiB) / vCPU
+              <div class="row">
+                <input id="launchMem" type="number" value="6144" style="width:82px" />
+                <input id="launchSmp" type="number" value="4" style="width:58px" />
+              </div>
+            </label>
+          </div>
+          <div class="row" style="justify-content:space-between">
+            <label class="chk"><input id="launchReset" type="checkbox" /> 重置为干净跳过 OOBE 镜像</label>
+            <button id="launchBtn" class="primary" onclick="launchInstance()">▶ 启动 / 复用实例</button>
+          </div>
+        </div>
+
+        <!-- Apps, HAP Installer & Privacy Toggle -->
+        <div class="card">
+          <h3>
+            <span>应用调试 &amp; HAP 自签名安装</span>
+            <button id="privacyBtn" class="ok" onclick="togglePrivacy()" title="控制 @kit.AppGalleryKit privacyManager 自动同意状态">隐私自动同意: 未知</button>
+          </h3>
+          <div class="row">
+            <button onclick="launchApp('top.frankhan.easytier','EntryAbility')">🚀 EasyTier</button>
+            <button onclick="launchApp('top.frankhan.resk','EntryAbility')">🖥 Resk (RustDesk)</button>
+            <button onclick="launchApp('com.huawei.hmos.settings','com.huawei.hmos.settings.MainAbility')">⚙ 系统设置</button>
+          </div>
+          <div class="row">
+            <input id="customBundle" placeholder="BundleName (如 top.frankhan.resk)" style="flex:1" />
+            <button onclick="launchCustomApp()">拉起</button>
+            <button class="danger" onclick="stopCustomApp()">强停</button>
+          </div>
+          <div class="row">
+            <input id="hapPath" placeholder="宿主机 .hap 路径，或拖放 .hap 到下方..." style="flex:1" />
+            <button class="primary" onclick="installByPath()">安装</button>
+          </div>
+          <div id="dropzone" class="dropzone" onclick="document.getElementById('hapFile').click()">
+            点击或拖放本地 .hap 文件上传、自动私有 PKI 签名并安装
+            <input id="hapFile" type="file" accept=".hap" style="display:none" onchange="uploadHap(this.files[0])" />
+          </div>
+          <div class="row">
+            <label class="chk"><input id="signChk" type="checkbox" checked /> 自动私有 PKI 签名</label>
+            <label class="chk"><input id="launchAfterChk" type="checkbox" checked /> 安装后自动拉起</label>
+          </div>
+        </div>
+      </div>
+
+      <!-- Inspector Tabs -->
+      <div class="tabs">
+        <button class="tab active" data-tab="hilog" onclick="selectTab('hilog')">HiLog 日志</button>
+        <button class="tab" data-tab="shell" onclick="selectTab('shell')">HDC Shell</button>
+        <button class="tab" data-tab="status" onclick="selectTab('status')">系统状态</button>
+        <button class="tab" data-tab="windows" onclick="selectTab('windows')">窗口树</button>
+        <button class="tab" data-tab="network" onclick="selectTab('network')">网络 / TUN</button>
+        <button class="tab" data-tab="faultlogs" onclick="selectTab('faultlogs')">崩溃日志</button>
+        <button class="tab" data-tab="mcp" onclick="selectTab('mcp')">MCP 接入</button>
+      </div>
+
+      <div class="tab-body">
+        <div id="tabToolbar" class="row"></div>
+        <pre id="consoleOut" class="console">就绪。点击「▶ 启动 / 复用实例」启动 HarmonyOS 7.0.0.107 模拟器。</pre>
+      </div>
+    </section>
+  </div>
+</div>
+
+<div id="toast" class="toast"></div>
+
+<script>
+const W = 1080, H = 2340;
+let state = { status: null, active: '', tab: 'hilog', privacyAutoAgree: true };
+let dragStart = null;
+
+function toast(msg, ms = 2600) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  clearTimeout(el._t);
+  el._t = setTimeout(() => el.classList.remove('show'), ms);
+}
+
+async function api(path, opts = {}) {
+  const res = await fetch(path, opts);
+  const txt = await res.text();
+  let data;
+  try { data = JSON.parse(txt); } catch { data = { raw: txt }; }
+  if (!res.ok) throw new Error(data.error || `HTTP ${res.status}: ${txt}`);
+  return data;
+}
+
+function setOut(text) {
+  document.getElementById('consoleOut').textContent = text || '(空输出)';
+}
+
+async function refreshStatus() {
+  try {
+    const st = await api('/api/status');
+    state.status = st;
+    document.getElementById('mcpUrlText').textContent = st.mcp_url;
+    const dot = document.getElementById('healthDot');
+    dot.className = 'dot ' + (st.usable ? 'ok' : 'warn');
+
+    const running = st.running_instances || [];
+    const saved = st.saved_instances || [];
+    if (!state.active || !running.some(x => x.name === state.active)) {
+      state.active = running[0]?.name || '';
+      reconnectStream();
+    }
+    renderInstances(running, saved);
+    if (state.active) refreshPrivacy();
+  } catch (e) {
+    toast('刷新状态失败: ' + e.message);
+  }
+}
+
+function renderInstances(running, saved) {
+  const el = document.getElementById('instList');
+  el.innerHTML = '';
+  if (running.length === 0) {
+    const div = document.createElement('div');
+    div.className = 'inst-meta';
+    div.textContent = saved.length
+      ? `无运行中实例（已有磁盘实例: ${saved.join(', ')}）`
+      : '无运行中实例，点击下方按钮启动。';
+    el.appendChild(div);
+    document.getElementById('activeInstLabel').textContent = '未运行';
+    return;
+  }
+  for (const inst of running) {
+    const row = document.createElement('div');
+    row.className = 'inst-item' + (inst.name === state.active ? ' active' : '');
+    row.onclick = () => { state.active = inst.name; renderInstances(running, saved); reconnectStream(); refreshPrivacy(); };
+    row.innerHTML = `
+      <div>
+        <div><strong>${inst.name}</strong> <span class="inst-meta">PID ${inst.pid} · ${inst.uptime_seconds}s</span></div>
+        <div class="inst-meta">hdc ${inst.hdc_target} · ${inst.display} · UDID ${(inst.udid||'').slice(0,12)}…</div>
+      </div>
+      <button class="danger" onclick="event.stopPropagation(); stopInstance('${inst.name}')">停止</button>
+    `;
+    el.appendChild(row);
+  }
+  document.getElementById('activeInstLabel').textContent = state.active || '未选中';
+}
+
+function reconnectStream() {
+  const img = document.getElementById('screenImg');
+  const empty = document.getElementById('phoneEmpty');
+  const badge = document.getElementById('streamState');
+  if (!state.active) {
+    img.src = '';
+    img.style.display = 'none';
+    empty.style.display = 'flex';
+    badge.textContent = '离线';
+    return;
+  }
+  const fps = Number(document.getElementById('fpsSelect').value);
+  empty.style.display = 'none';
+  img.style.display = 'block';
+  if (fps > 0) {
+    img.src = `/api/instances/${encodeURIComponent(state.active)}/stream?fps=${fps}&t=${Date.now()}`;
+    badge.textContent = `实时 ${fps} FPS`;
+  } else {
+    img.src = `/api/instances/${encodeURIComponent(state.active)}/screen.png?t=${Date.now()}`;
+    badge.textContent = '单帧模式';
+  }
+}
+
+function refreshOneFrame() {
+  if (!state.active) return toast('请先启动实例');
+  const img = document.getElementById('screenImg');
+  document.getElementById('phoneEmpty').style.display = 'none';
+  img.style.display = 'block';
+  img.src = `/api/instances/${encodeURIComponent(state.active)}/screen.png?t=${Date.now()}`;
+  document.getElementById('streamState').textContent = '已刷新 PNG';
+}
+
+function downloadPng() {
+  if (!state.active) return toast('请先启动实例');
+  const a = document.createElement('a');
+  a.href = `/api/instances/${encodeURIComponent(state.active)}/screen.png?t=${Date.now()}`;
+  a.download = `hmos7-${state.active}-${Date.now()}.png`;
+  a.click();
+}
+
+function pointerToGuest(e) {
+  const rect = document.getElementById('phone').getBoundingClientRect();
+  const x = Math.max(0, Math.min(W, Math.round(((e.clientX - rect.left) / rect.width) * W)));
+  const y = Math.max(0, Math.min(H, Math.round(((e.clientY - rect.top) / rect.height) * H)));
+  return { x, y, px: e.clientX - rect.left, py: e.clientY - rect.top };
+}
+
+function spawnRipple(px, py) {
+  const r = document.createElement('div');
+  r.className = 'ripple';
+  r.style.left = px + 'px';
+  r.style.top = py + 'px';
+  document.getElementById('phone').appendChild(r);
+  setTimeout(() => r.remove(), 460);
+}
+
+const phoneEl = document.getElementById('phone');
+phoneEl.addEventListener('pointermove', e => {
+  const p = pointerToGuest(e);
+  document.getElementById('coordHud').textContent = `${p.x}, ${p.y}`;
+});
+phoneEl.addEventListener('pointerdown', e => {
+  if (!state.active || e.button !== 0) return;
+  phoneEl.setPointerCapture(e.pointerId);
+  dragStart = { ...pointerToGuest(e), t: Date.now() };
+});
+phoneEl.addEventListener('pointerup', async e => {
+  if (!dragStart || !state.active) return;
+  const end = pointerToGuest(e);
+  const start = dragStart;
+  dragStart = null;
+  const dist = Math.hypot(end.x - start.x, end.y - start.y);
+  spawnRipple(end.px, end.py);
+  if (dist < 22) {
+    await sendAct({ action: 'tap', x: end.x, y: end.y }, `Tap (${end.x}, ${end.y})`);
+  } else {
+    const dur = Math.max(150, Math.min(800, Date.now() - start.t));
+    await sendAct({ action: 'swipe', x: start.x, y: start.y, x2: end.x, y2: end.y, duration_ms: dur },
+      `Swipe (${start.x},${start.y}) → (${end.x},${end.y})`);
+  }
+});
+
+async function launchInstance() {
+  const btn = document.getElementById('launchBtn');
+  btn.disabled = true;
+  btn.textContent = '⏳ 启动中 (约 11~30s)...';
+  setOut('正在启动 HarmonyOS 7.0.0.107 QEMU 实例，等待 SceneBoard 就绪与自动解锁...');
+  try {
+    const res = await api('/api/instances/launch', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        instance: document.getElementById('launchName').value.trim() || 'default',
+        display: document.getElementById('launchDisplay').value,
+        net_mode: document.getElementById('launchNet').value,
+        peer: document.getElementById('launchPeer').value.trim() || 'off',
+        memory_mb: Number(document.getElementById('launchMem').value) || 6144,
+        smp: Number(document.getElementById('launchSmp').value) || 4,
+        reset: document.getElementById('launchReset').checked,
+        unlock: true,
+      }),
+    });
+    state.active = res.instance;
+    setOut(JSON.stringify(res, null, 2));
+    toast(`实例 ${res.instance} 已就绪！`);
+    await refreshStatus();
+    reconnectStream();
+  } catch (e) {
+    setOut('启动失败:\n' + e.message);
+    toast('启动失败: ' + e.message, 4000);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '▶ 启动 / 复用实例';
+  }
+}
+
+async function stopInstance(name) {
+  try {
+    const res = await api('/api/instances/stop', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ instance: name }),
+    });
+    toast(`已停止 ${name}`);
+    setOut(JSON.stringify(res, null, 2));
+    await refreshStatus();
+  } catch (e) { toast('停止失败: ' + e.message); }
+}
+
+async function stopAll() {
+  try {
+    const res = await api('/api/instances/stop', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ all: true }),
+    });
+    toast('已停止全部实例');
+    setOut(JSON.stringify(res, null, 2));
+    await refreshStatus();
+  } catch (e) { toast('操作失败: ' + e.message); }
+}
+
+async function sendAct(payload, label) {
+  if (!state.active) return toast('请先启动实例');
+  try {
+    const res = await api(`/api/instances/${encodeURIComponent(state.active)}/act`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    if (label) toast(label, 1400);
+    if (payload.action === 'shell' || payload.action === 'launch_app' || payload.action === 'wake') {
+      setOut(res.output || '(ok)');
+    }
+    if (Number(document.getElementById('fpsSelect').value) === 0) setTimeout(refreshOneFrame, 450);
+  } catch (e) {
+    toast('操作失败: ' + e.message, 3500);
+  }
+}
+
+function sendKey(key) { return sendAct({ action: 'key', key }, `Key: ${key}`); }
+function sendText() {
+  const el = document.getElementById('textInput');
+  if (!el.value) return;
+  const txt = el.value;
+  el.value = '';
+  sendAct({ action: 'text', text: txt }, `已输入文字`);
+}
+function launchApp(bundle, ability) {
+  document.getElementById('customBundle').value = bundle;
+  sendAct({ action: 'launch_app', bundle, ability }, `启动 ${bundle}`);
+}
+function launchCustomApp() {
+  const b = document.getElementById('customBundle').value.trim();
+  if (!b) return toast('请输入 BundleName');
+  sendAct({ action: 'launch_app', bundle: b, ability: 'EntryAbility' }, `启动 ${b}`);
+}
+function stopCustomApp() {
+  const b = document.getElementById('customBundle').value.trim();
+  if (!b) return toast('请输入 BundleName');
+  sendAct({ action: 'stop_app', bundle: b }, `已强停 ${b}`);
+}
+
+async function installByPath() {
+  if (!state.active) return toast('请先启动实例');
+  const p = document.getElementById('hapPath').value.trim();
+  if (!p) return toast('请输入 .hap 路径');
+  setOut(`正在签名并安装 ${p} ...`);
+  try {
+    const res = await api(`/api/instances/${encodeURIComponent(state.active)}/install`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        path: p,
+        sign: document.getElementById('signChk').checked,
+        launch: document.getElementById('launchAfterChk').checked,
+      }),
+    });
+    setOut(JSON.stringify(res, null, 2));
+    toast(`安装完成: ${res.bundle_name || p}`);
+  } catch (e) {
+    setOut('安装失败:\n' + e.message);
+    toast('安装失败: ' + e.message, 4000);
+  }
+}
+
+async function uploadHap(file) {
+  if (!file) return;
+  if (!state.active) return toast('请先启动实例');
+  setOut(`正在上传、签名并安装 ${file.name} (${(file.size/1048576).toFixed(1)} MB)...`);
+  const fd = new FormData();
+  fd.append('file', file);
+  fd.append('sign', String(document.getElementById('signChk').checked));
+  fd.append('launch', String(document.getElementById('launchAfterChk').checked));
+  try {
+    const res = await api(`/api/instances/${encodeURIComponent(state.active)}/install`, { method: 'POST', body: fd });
+    setOut(JSON.stringify(res, null, 2));
+    toast(`安装完成: ${res.bundle_name || file.name}`);
+  } catch (e) {
+    setOut('上传安装失败:\n' + e.message);
+    toast('上传安装失败: ' + e.message, 4000);
+  }
+}
+
+const dz = document.getElementById('dropzone');
+dz.addEventListener('dragover', e => { e.preventDefault(); dz.classList.add('over'); });
+dz.addEventListener('dragleave', () => dz.classList.remove('over'));
+dz.addEventListener('drop', e => {
+  e.preventDefault(); dz.classList.remove('over');
+  if (e.dataTransfer.files?.[0]) uploadHap(e.dataTransfer.files[0]);
+});
+
+async function refreshPrivacy() {
+  if (!state.active) return;
+  try {
+    const res = await api(`/api/instances/${encodeURIComponent(state.active)}/privacy`);
+    state.privacyAutoAgree = !!res.auto_agree;
+    const btn = document.getElementById('privacyBtn');
+    btn.className = state.privacyAutoAgree ? 'ok' : 'danger';
+    btn.textContent = `隐私自动同意: ${state.privacyAutoAgree ? '开 (已放行)' : '关 (未同意态)'}`;
+  } catch {}
+}
+
+async function togglePrivacy() {
+  if (!state.active) return toast('请先启动实例');
+  try {
+    const next = !state.privacyAutoAgree;
+    const res = await api(`/api/instances/${encodeURIComponent(state.active)}/privacy`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ auto_agree: next }),
+    });
+    state.privacyAutoAgree = !!res.auto_agree;
+    await refreshPrivacy();
+    setOut(JSON.stringify(res, null, 2));
+    toast(`隐私自动同意已切换为: ${next ? '开启' : '关闭'}（重启目标 App 生效）`);
+  } catch (e) { toast('切换失败: ' + e.message); }
+}
+
+function selectTab(tab) {
+  state.tab = tab;
+  document.querySelectorAll('.tab').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
+  const bar = document.getElementById('tabToolbar');
+  if (tab === 'hilog') {
+    bar.innerHTML = `
+      <input id="hlBundle" placeholder="包名/进程 (如 top.frankhan.resk)" style="width:210px" />
+      <input id="hlGrep" placeholder="关键字过滤 (可选)" style="width:170px" />
+      <input id="hlLimit" type="number" value="100" style="width:70px" />
+      <button class="primary" onclick="runObserve('hilog')">拉取日志</button>
+      <button onclick="runObserve('hilog', true)">拉取并清空</button>
+    `;
+  } else if (tab === 'shell') {
+    bar.innerHTML = `
+      <input id="shellCmd" placeholder="输入 hdc shell 命令 (如 param get const.product.software.version)" style="flex:1" onkeydown="if(event.key==='Enter')runShell()" />
+      <button class="primary" onclick="runShell()">执行</button>
+      <button onclick="runShell('ip addr; ip route; ls -la /dev/net/tun')">网络</button>
+      <button onclick="runShell('ps -ef | grep -E \"easytier|resk|sceneboard|render_service\"')">进程</button>
+    `;
+  } else if (tab === 'mcp') {
+    bar.innerHTML = `<button class="primary" onclick="loadMcpInfo()">刷新 MCP 工具清单</button><button onclick="copyMcpUrl()">复制 MCP URL</button>`;
+    loadMcpInfo();
+  } else {
+    bar.innerHTML = `<input id="obsGrep" placeholder="关键字过滤 (可选)" style="width:220px" /><button class="primary" onclick="runObserve('${tab}')">刷新 ${tab}</button>`;
+    if (state.active) runObserve(tab);
+  }
+}
+
+async function runObserve(what, clear = false) {
+  if (!state.active) return toast('请先启动实例');
+  const body = { what, clear };
+  if (what === 'hilog') {
+    body.bundle = document.getElementById('hlBundle')?.value.trim() || '';
+    body.grep = document.getElementById('hlGrep')?.value.trim() || '';
+    body.limit = Number(document.getElementById('hlLimit')?.value) || 100;
+  } else {
+    body.grep = document.getElementById('obsGrep')?.value.trim() || '';
+    body.limit = 150;
+  }
+  setOut(`加载 ${what}...`);
+  try {
+    const res = await api(`/api/instances/${encodeURIComponent(state.active)}/observe`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    setOut(res.output || '(无内容)');
+  } catch (e) { setOut('查询失败:\n' + e.message); }
+}
+
+async function runShell(preset) {
+  const cmd = preset || document.getElementById('shellCmd')?.value.trim();
+  if (!cmd) return;
+  if (preset && document.getElementById('shellCmd')) document.getElementById('shellCmd').value = preset;
+  setOut(`$ ${cmd}\n...`);
+  await sendAct({ action: 'shell', command: cmd });
+}
+
+async function loadMcpInfo() {
+  try {
+    const res = await api('/api/mcp/tools');
+    const cfg = {
+      mcpServers: {
+        harmony_emulator: {
+          type: 'http',
+          url: res.mcp_url,
+        },
+      },
+    };
+    setOut(
+      `=== Fancy / MCP 接入配置 ===\n${JSON.stringify(cfg, null, 2)}\n\n` +
+      `=== 暴露工具 (${res.tools.length} 个) ===\n` +
+      res.tools.map(t => `- ${t.name}: ${t.description}`).join('\n')
+    );
+  } catch (e) { setOut('加载失败: ' + e.message); }
+}
+
+function copyMcpUrl() {
+  const url = document.getElementById('mcpUrlText').textContent;
+  navigator.clipboard?.writeText(url).then(() => toast('已复制 ' + url));
+}
+
+selectTab('hilog');
+refreshStatus();
+setInterval(refreshStatus, 6000);
+</script>
+</body>
+</html>
