@@ -5,6 +5,7 @@ images/
 dist/
 tools/
 signing/
+.cache/
 *.tar.gz
 *.tar.zst
 *.sha256

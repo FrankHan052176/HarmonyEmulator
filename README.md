@@ -17,6 +17,55 @@
 
 ---
 
+## 一键部署（拉完代码即可直接跑）
+
+`./install.sh` 会自动完成全部环境与镜像准备，无需手动拷贝镜像：
+1. 自动检查并安装 `qemu-system-aarch64` 等依赖；
+2. 自动从本仓库 **GitHub Release (`v0.1.0`)** 下载：
+   - 对应平台的预编译 `harmony-emulator-dashboard-{darwin,linux}-arm64` 二进制；
+   - 自研内核、initramfs、512 MiB `qemu_overlay.img` 与配套自签测试 PKI（`hmos7-boot-overlay-arm64.tar.gz`）；
+   - 已跳过 OOBE 的预置数据分区（`hmos7-userdata-provisioned-arm64.tar.gz`；如想省流量从空白数据分区启动，可追加 `--blank-userdata`）；
+3. 自动调用 `scripts/fetch-donor.sh` 从华为官方公开 OTA CDN 拉取 Pura 70 Pro+ `7.0.0.107` 固件包并仅提取校验所需的 5 个只读分区（`system` / `vendor` / `sys_prod` / `chip_prod` / `cust`，逐一校验 SHA-256；如本机已有 `update_full_base.zip` 可传 `--donor-zip <路径>`，如本机已有现成镜像目录可传 `--images-from <路径>`）。
+
+### macOS arm64（Apple Silicon）
+
+```bash
+git clone https://github.com/FrankHan052176/HarmonyEmulator.git
+cd HarmonyEmulator
+
+# 1. 一键部署（自动拉取二进制、启动镜像、预置数据分区与 5 个固件分区）
+./install.sh
+
+# 2. （推荐，仅执行一次）开启 en0 真二层桥接以太网（零 NAT）
+sudo ./scripts/setup-bridged-macos.sh
+
+# 3. 启动独立 Web 控制台与 MCP 服务（或执行 ./scripts/install-service.sh 注册常驻服务）
+./bin/harmony-emulator-dashboard --listen 127.0.0.1:18555
+```
+
+### Linux arm64（Ubuntu / Debian / Fedora / Arch）
+
+```bash
+git clone https://github.com/FrankHan052176/HarmonyEmulator.git
+cd HarmonyEmulator
+
+# 1. 一键部署（自动安装 QEMU/KVM 依赖并拉取全部运行时镜像）
+./install.sh
+
+# 2. 授予当前用户 /dev/kvm 权限（首次需重新登录生效）
+sudo usermod -aG kvm "$USER"
+
+# 3. （推荐，仅执行一次）配置 br0 真二层桥接以太网（零 NAT）
+sudo ./scripts/setup-bridged-linux.sh
+
+# 4. 启动独立 Web 控制台与 MCP 服务（或执行 ./scripts/install-service.sh 注册 systemd 服务）
+./bin/harmony-emulator-dashboard --listen 127.0.0.1:18555
+```
+
+> **提示**：宿主机准备好对应平台的 `hdc`（加入 `PATH`、放到 `tools/hdc` 或设置 `HMOS7_HDC`）即可控制模拟器。若需自动签名未签名 `.hap`，安装 Java 17+ 并设置 `OHOS_SDK_HOME` / `DEVECO_SDK_HOME`（或将 `hap-sign-tool.jar` 放到 `tools/signing/`）。
+
+---
+
 ## 目录结构
 
 ```text
@@ -26,6 +75,7 @@ HarmonyEmulator/
 ├── dashboard/                       # 独立 Go 服务 HarmonyEmulatorDashboard（Web UI + REST + MCP）
 ├── scripts/
 │   ├── run-hmos7.sh                 # 跨平台 QEMU arm64_virt 启动器
+│   ├── fetch-donor.sh               # 自动从华为官方 CDN 拉取并解包校验 5 个固件分区
 │   ├── sign-hap.sh                  # 跨平台 .hap 自动签名脚本
 │   ├── setup-bridged-macos.sh       # macOS 一键开启 en0 真二层桥接（socket_vmnet）
 │   ├── setup-bridged-linux.sh       # Linux arm64 一键开启 br0 真二层桥接（qemu-bridge-helper）
@@ -34,66 +84,9 @@ HarmonyEmulator/
 │   └── package-runtime.sh           # 打包可迁移离线发行包（含 SHA256SUMS）
 ├── native/                          # 定制 C/C++ 组件源码（display / vulkan / framework）
 ├── build/                           # 镜像构建脚本（initramfs / overlay / native 交叉编译 / 信任库合并）
-├── images/                          # （本地运行时镜像，不纳入 Git）
-├── signing/                         # （本地自签 PKI，不纳入 Git，由 build-m2-native.sh 生成）
-└── tools/                           # （可选放置本机 hdc 与 hap-sign-tool.jar，不纳入 Git）
-```
-
----
-
-## 运行时镜像与工具准备
-
-由于镜像包含设备固件分区且体积较大，本仓库仅托管源码与自动化脚本，不包含二进制镜像和华为 SDK 专有工具。运行前需准备好以下文件：
-
-1. **运行时镜像**（放入 `images/` 目录，或通过 `./install.sh --images-from <目录或压缩包>` 导入）：
-   ```text
-   images/
-   ├── kernel/Image                 # 打过 OHOS binder / access_token_id / selinux 补丁的 Linux 6.6 内核
-   ├── initramfs.cpio.gz            # 包含 m1-init.sh 及 kstate.ko / hwlog.ko / ashmem.ko
-   ├── qemu_overlay.img             # 512 MiB ext4 覆盖分区（由 build/build-overlay-m2.sh 构建）
-   ├── userdata-provisioned.img     # （可选）已跳过 OOBE 的预置数据分区
-   └── donor/
-       ├── system.img
-       ├── vendor.img
-       ├── sys_prod.img
-       ├── chip_prod.img
-       └── cust.img
-   ```
-2. **HarmonyOS 工具**：
-   - 将对应平台（macOS arm64 / Linux arm64）的 `hdc` 加入 `PATH`、放到 `tools/hdc`，或设置环境变量 `HMOS7_HDC=/path/to/hdc`（也支持自动识别 `OHOS_SDK_HOME` / `DEVECO_SDK_HOME`）。
-   - 若需自动签名安装未签名 `.hap`，需安装 Java 17+，并设置 `OHOS_SDK_HOME`/`DEVECO_SDK_HOME`（或将 `hap-sign-tool.jar` 与 `UnsgnedDebugProfileTemplate.json` 放到 `tools/signing/`），同时将私有 PKI 放到 `signing/`。
-
----
-
-## 一键部署
-
-### macOS arm64（Apple Silicon）
-
-```bash
-# 1. 一键安装依赖、编译/部署二进制并体检（如已有镜像目录可加 --images-from）
-./install.sh --images-from /path/to/images
-
-# 2. （推荐，仅执行一次）开启 en0 真二层桥接以太网（零 NAT）
-sudo ./scripts/setup-bridged-macos.sh
-
-# 3. （可选）注册为 macOS LaunchAgent 常驻后台服务
-./scripts/install-service.sh --listen 127.0.0.1:18555
-```
-
-### Linux arm64（Ubuntu / Debian / Fedora / Arch）
-
-```bash
-# 1. 一键安装 QEMU/KVM/Java 等依赖并部署二进制
-./install.sh --images-from /path/to/images
-
-# 2. 授予当前用户 /dev/kvm 访问权限（首次需重新登录生效）
-sudo usermod -aG kvm "$USER"
-
-# 3. （推荐，仅执行一次）配置 br0 真二层桥接以太网（零 NAT）
-sudo ./scripts/setup-bridged-linux.sh
-
-# 4. （可选）注册为 systemd 常驻服务（加 --system 可注册为系统级服务）
-./scripts/install-service.sh --listen 127.0.0.1:18555
+├── images/                          # 运行时镜像目录（由 install.sh 自动拉取，不纳入 Git）
+├── signing/                         # 自签测试 PKI（由 install.sh 自动拉取，不纳入 Git）
+└── tools/                           # 可选放置本机 hdc 与 hap-sign-tool.jar（不纳入 Git）
 ```
 
 ---
