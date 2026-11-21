@@ -86,17 +86,32 @@ else
     warn "Signing kit incomplete under $ROOT/signing or $ROOT/tools/signing"
 fi
 
-# Check runtime images
-for rel in images/kernel/Image images/initramfs.cpio.gz images/qemu_overlay.img \
-           images/donor/system.img images/donor/vendor.img images/donor/sys_prod.img images/donor/chip_prod.img images/donor/cust.img; do
-    if [ -f "$ROOT/$rel" ]; then
-        ok "Image: $rel ($(du -hL "$ROOT/$rel" | awk '{print $1}'))"
+# Resolve images_dir (HMOS7_IMAGES_DIR -> config.json -> $ROOT/images)
+IMAGES_DIR="${HMOS7_IMAGES_DIR:-}"
+if [ -z "$IMAGES_DIR" ] && [ -f "$ROOT/config.json" ] && command -v python3 >/dev/null 2>&1; then
+    IMAGES_DIR="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("images_dir",""))' "$ROOT/config.json" 2>/dev/null || true)"
+fi
+IMAGES_DIR="${IMAGES_DIR:-$ROOT/images}"
+echo "Images: $IMAGES_DIR"
+
+# Check runtime images (Phone profile)
+PHONE_BASE="$IMAGES_DIR/phone"
+[ -d "$PHONE_BASE" ] || PHONE_BASE="$IMAGES_DIR"
+for rel in kernel/Image initramfs.cpio.gz qemu_overlay.img \
+           donor/system.img donor/vendor.img donor/sys_prod.img donor/chip_prod.img donor/cust.img; do
+    if [ -f "$PHONE_BASE/$rel" ]; then
+        ok "Phone image: $rel ($(du -hL "$PHONE_BASE/$rel" | awk '{print $1}'))"
     else
-        fail "Missing image: $ROOT/$rel"
+        fail "Missing phone image: $PHONE_BASE/$rel"
     fi
 done
-if [ -f "$ROOT/images/userdata-provisioned.img" ]; then
-    ok "Image (optional skip-OOBE): images/userdata-provisioned.img ($(du -hL "$ROOT/images/userdata-provisioned.img" | awk '{print $1}'))"
+if [ -f "$IMAGES_DIR/pc/donor/system.img" ] && [ -f "$IMAGES_DIR/pc/qemu_overlay.img" ]; then
+    ok "PC image profile ready ($IMAGES_DIR/pc)"
+else
+    warn "PC image profile not configured under $IMAGES_DIR/pc (optional)"
+fi
+if [ -f "$PHONE_BASE/userdata-provisioned.img" ]; then
+    ok "Image (optional skip-OOBE): userdata-provisioned.img ($(du -hL "$PHONE_BASE/userdata-provisioned.img" | awk '{print $1}'))"
 else
     ok "Userdata: fresh 4G sparse ext4 will be auto-initialized on first boot"
 fi

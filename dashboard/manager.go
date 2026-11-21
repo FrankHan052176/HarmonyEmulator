@@ -25,14 +25,23 @@ import (
 
 var validInstanceName = regexp.MustCompile(`^[A-Za-z0-9_.-]{1,32}$`)
 
+type StorageConfig struct {
+	ImagesDir    string `json:"images_dir"`
+	InstancesDir string `json:"instances_dir"`
+	HDCPath      string `json:"hdc_path,omitempty"`
+}
+
 type LaunchRequest struct {
 	Instance       string `json:"instance,omitempty"`
+	Profile        string `json:"profile,omitempty"`
 	Reset          bool   `json:"reset,omitempty"`
 	Display        string `json:"display,omitempty"`
 	Peer           string `json:"peer,omitempty"`
 	NetMode        string `json:"net_mode,omitempty"`
 	MemoryMB       int    `json:"memory_mb,omitempty"`
 	SMP            int    `json:"smp,omitempty"`
+	Width          int    `json:"width,omitempty"`
+	Height         int    `json:"height,omitempty"`
 	Unlock         *bool  `json:"unlock,omitempty"`
 	TimeoutSeconds int    `json:"timeout_seconds,omitempty"`
 }
@@ -97,12 +106,15 @@ type ScreenshotResult struct {
 
 type InstanceInfo struct {
 	Name      string `json:"name"`
+	Profile   string `json:"profile"`
 	PID       int    `json:"pid"`
 	HDCTarget string `json:"hdc_target"`
 	ShellPort int    `json:"shell_port"`
 	Display   string `json:"display"`
 	NetMode   string `json:"net_mode"`
 	Peer      string `json:"peer"`
+	Width     int    `json:"width"`
+	Height    int    `json:"height"`
 	UDID      string `json:"udid,omitempty"`
 	UptimeSec int64  `json:"uptime_seconds"`
 	ScreenURL string `json:"screen_url"`
@@ -111,6 +123,7 @@ type InstanceInfo struct {
 
 type runningInstance struct {
 	name      string
+	profile   string
 	instDir   string
 	hdcPort   int
 	shellPort int
@@ -118,6 +131,8 @@ type runningInstance struct {
 	display   string
 	netMode   string
 	peer      string
+	width     int
+	height    int
 	udid      string
 	cmd       *exec.Cmd
 	stderrF   *os.File
@@ -130,9 +145,12 @@ type runningInstance struct {
 }
 
 type Manager struct {
-	root    string
-	hdcPath string
-	baseURL string
+	root         string
+	imagesDir    string
+	instancesDir string
+	hdcPath      string
+	configPath   string
+	baseURL      string
 
 	mu        sync.Mutex
 	instances map[string]*runningInstance
@@ -217,15 +235,91 @@ func firstExisting(paths ...string) string {
 	return ""
 }
 
-func NewManager(root, hdcPath, baseURL string) *Manager {
+func NewManager(root, hdcPath, baseURL, imagesDir, instancesDir string) *Manager {
 	resolvedRoot := detectRoot(root)
-	resolvedHDC := detectHDC(hdcPath, resolvedRoot)
-	return &Manager{
-		root:      resolvedRoot,
-		hdcPath:   resolvedHDC,
-		baseURL:   strings.TrimRight(baseURL, "/"),
-		instances: make(map[string]*runningInstance),
+	cfgPath := filepath.Join(resolvedRoot, "config.json")
+
+	var fileCfg StorageConfig
+	if raw, err := os.ReadFile(cfgPath); err == nil {
+		_ = json.Unmarshal(raw, &fileCfg)
 	}
+
+	pickPath := func(flagVal, envKey, cfgVal, fallback string) string {
+		if v := strings.TrimSpace(flagVal); v != "" {
+			return v
+		}
+		if v := strings.TrimSpace(os.Getenv(envKey)); v != "" {
+			return v
+		}
+		if v := strings.TrimSpace(cfgVal); v != "" {
+			return v
+		}
+		return fallback
+	}
+
+	resolvedImages := pickPath(imagesDir, "HMOS7_IMAGES_DIR", fileCfg.ImagesDir, filepath.Join(resolvedRoot, "images"))
+	resolvedInstances := pickPath(instancesDir, "HMOS7_INSTANCES_DIR", fileCfg.InstancesDir, filepath.Join(resolvedRoot, "instances"))
+	explicitHDC := strings.TrimSpace(hdcPath)
+	if explicitHDC == "" {
+		explicitHDC = strings.TrimSpace(fileCfg.HDCPath)
+	}
+	resolvedHDC := detectHDC(explicitHDC, resolvedRoot)
+
+	return &Manager{
+		root:         resolvedRoot,
+		imagesDir:    resolvedImages,
+		instancesDir: resolvedInstances,
+		hdcPath:      resolvedHDC,
+		configPath:   cfgPath,
+		baseURL:      strings.TrimRight(baseURL, "/"),
+		instances:    make(map[string]*runningInstance),
+	}
+}
+
+func (m *Manager) GetConfig() map[string]any {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return map[string]any{
+		"root":          m.root,
+		"config_path":   m.configPath,
+		"images_dir":    m.imagesDir,
+		"instances_dir": m.instancesDir,
+		"hdc_path":      m.hdcPath,
+	}
+}
+
+func (m *Manager) UpdateConfig(req StorageConfig) (map[string]any, error) {
+	m.mu.Lock()
+	if v := strings.TrimSpace(req.ImagesDir); v != "" {
+		abs, err := filepath.Abs(v)
+		if err != nil {
+			m.mu.Unlock()
+			return nil, fmt.Errorf("invalid images_dir: %w", err)
+		}
+		m.imagesDir = abs
+	}
+	if v := strings.TrimSpace(req.InstancesDir); v != "" {
+		abs, err := filepath.Abs(v)
+		if err != nil {
+			m.mu.Unlock()
+			return nil, fmt.Errorf("invalid instances_dir: %w", err)
+		}
+		m.instancesDir = abs
+	}
+	if v := strings.TrimSpace(req.HDCPath); v != "" {
+		m.hdcPath = detectHDC(v, m.root)
+	}
+	cfg := StorageConfig{
+		ImagesDir:    m.imagesDir,
+		InstancesDir: m.instancesDir,
+		HDCPath:      m.hdcPath,
+	}
+	m.mu.Unlock()
+
+	if b, err := json.MarshalIndent(cfg, "", "  "); err == nil {
+		_ = os.WriteFile(m.configPath, append(b, '\n'), 0o644)
+	}
+	return m.GetConfig(), nil
 }
 
 func (m *Manager) launcherPath() string {
@@ -242,13 +336,29 @@ func (m *Manager) signScriptPath() string {
 	)
 }
 
-func (m *Manager) missingRequirements() []string {
+func normalizeProfile(p string) string {
+	switch strings.ToLower(strings.TrimSpace(p)) {
+	case "pc", "2in1", "desktop":
+		return "pc"
+	default:
+		return "phone"
+	}
+}
+
+func (m *Manager) missingRequirementsFor(profile string) []string {
+	profile = normalizeProfile(profile)
+	m.mu.Lock()
+	imgDir := m.imagesDir
+	hdc := m.hdcPath
+	m.mu.Unlock()
+
+	profDir := filepath.Join(imgDir, profile)
 	var missing []string
 	if _, err := exec.LookPath("qemu-system-aarch64"); err != nil {
 		missing = append(missing, "qemu-system-aarch64 (not in PATH)")
 	}
-	if !fileExists(m.hdcPath) {
-		if _, err := exec.LookPath(m.hdcPath); err != nil {
+	if !fileExists(hdc) {
+		if _, err := exec.LookPath(hdc); err != nil {
 			missing = append(missing, "hdc (set HMOS7_HDC or add hdc to PATH)")
 		}
 	}
@@ -257,10 +367,15 @@ func (m *Manager) missingRequirements() []string {
 		paths []string
 	}{
 		{"run-hmos7.sh", []string{filepath.Join(m.root, "scripts", "run-hmos7.sh"), filepath.Join(m.root, "bin", "run-hmos7.sh")}},
-		{"kernel Image", []string{filepath.Join(m.root, "images", "kernel", "Image"), filepath.Join(m.root, "out", "kernel", "Image")}},
-		{"initramfs.cpio.gz", []string{filepath.Join(m.root, "images", "initramfs.cpio.gz"), filepath.Join(m.root, "out", "initramfs.cpio.gz")}},
-		{"qemu_overlay.img", []string{filepath.Join(m.root, "images", "qemu_overlay.img"), filepath.Join(m.root, "out", "qemu_overlay.img")}},
-		{"donor system.img", []string{filepath.Join(m.root, "images", "donor", "system.img"), filepath.Join(m.root, "donor", "pura70proplus-7.0.0.107", "images", "system.img")}},
+		{"kernel Image", []string{filepath.Join(profDir, "kernel", "Image"), filepath.Join(imgDir, "kernel", "Image"), filepath.Join(imgDir, "out", "kernel", "Image")}},
+		{"initramfs.cpio.gz", []string{filepath.Join(profDir, "initramfs.cpio.gz"), filepath.Join(imgDir, "initramfs.cpio.gz"), filepath.Join(imgDir, "out", "initramfs.cpio.gz")}},
+		{"qemu_overlay.img", []string{filepath.Join(profDir, "qemu_overlay.img"), filepath.Join(imgDir, "qemu_overlay.img"), filepath.Join(imgDir, "out", "qemu_overlay.img")}},
+		{"donor system.img", func() []string {
+			if profile == "pc" {
+				return []string{filepath.Join(profDir, "donor", "system.img")}
+			}
+			return []string{filepath.Join(profDir, "donor", "system.img"), filepath.Join(imgDir, "donor", "system.img"), filepath.Join(imgDir, "donor", "pura70proplus-7.0.0.107", "images", "system.img")}
+		}()},
 	}
 	for _, c := range checks {
 		found := false
@@ -277,8 +392,12 @@ func (m *Manager) missingRequirements() []string {
 	return missing
 }
 
+func (m *Manager) missingRequirements() []string {
+	return m.missingRequirementsFor("phone")
+}
+
 func (m *Manager) Usable() bool {
-	return len(m.missingRequirements()) == 0
+	return len(m.missingRequirementsFor("phone")) == 0 || len(m.missingRequirementsFor("pc")) == 0
 }
 
 func detectAccel() string {
@@ -337,16 +456,21 @@ func (m *Manager) Close(ctx context.Context) {
 }
 
 func (m *Manager) savedInstances() []string {
-	entries, err := os.ReadDir(filepath.Join(m.root, "instances"))
+	m.mu.Lock()
+	instRoot := m.instancesDir
+	m.mu.Unlock()
+
+	entries, err := os.ReadDir(instRoot)
 	if err != nil {
 		return nil
 	}
 	var out []string
 	for _, e := range entries {
-		if !e.IsDir() || !validInstanceName.MatchString(e.Name()) {
+		if !validInstanceName.MatchString(e.Name()) {
 			continue
 		}
-		if fileExists(filepath.Join(m.root, "instances", e.Name(), "userdata.img")) {
+		dirPath := filepath.Join(instRoot, e.Name())
+		if st, err := os.Stat(dirPath); err == nil && st.IsDir() && fileExists(filepath.Join(dirPath, "userdata.img")) {
 			out = append(out, e.Name())
 		}
 	}
@@ -356,11 +480,19 @@ func (m *Manager) savedInstances() []string {
 
 func (m *Manager) Status(filterInstance string) map[string]any {
 	qemuBin, _ := exec.LookPath("qemu-system-aarch64")
-	provReady := fileExists(filepath.Join(m.root, "images", "userdata-provisioned.img")) ||
-		fileExists(filepath.Join(m.root, "out", "userdata-provisioned.img"))
+	m.mu.Lock()
+	imgDir := m.imagesDir
+	instRoot := m.instancesDir
+	hdc := m.hdcPath
+	m.mu.Unlock()
+
+	provReady := fileExists(filepath.Join(imgDir, "phone", "userdata-provisioned.img")) ||
+		fileExists(filepath.Join(imgDir, "userdata-provisioned.img")) ||
+		fileExists(filepath.Join(imgDir, "out", "userdata-provisioned.img"))
 	signReady := fileExists(m.signScriptPath())
 	bridgedReady, sharedReady := detectBridgedReady()
-	missing := m.missingRequirements()
+	phoneMissing := m.missingRequirementsFor("phone")
+	pcMissing := m.missingRequirementsFor("pc")
 
 	m.mu.Lock()
 	active := make([]InstanceInfo, 0, len(m.instances))
@@ -380,12 +512,15 @@ func (m *Manager) Status(filterInstance string) map[string]any {
 		}
 		active = append(active, InstanceInfo{
 			Name:      inst.name,
+			Profile:   inst.profile,
 			PID:       pid,
 			HDCTarget: fmt.Sprintf("127.0.0.1:%d", inst.hdcPort),
 			ShellPort: inst.shellPort,
 			Display:   inst.display,
 			NetMode:   inst.netMode,
 			Peer:      inst.peer,
+			Width:     inst.width,
+			Height:    inst.height,
 			UDID:      inst.udid,
 			UptimeSec: int64(time.Since(inst.startedAt).Seconds()),
 			ScreenURL: fmt.Sprintf("%s/api/instances/%s/screen.png", m.baseURL, inst.name),
@@ -400,13 +535,20 @@ func (m *Manager) Status(filterInstance string) map[string]any {
 		"host_os":               runtime.GOOS,
 		"host_arch":             runtime.GOARCH,
 		"accel":                 detectAccel(),
-		"usable":                len(missing) == 0,
-		"missing_requirements":  missing,
+		"usable":                len(phoneMissing) == 0 || len(pcMissing) == 0,
+		"missing_requirements":  phoneMissing,
+		"profiles": map[string]any{
+			"phone": map[string]any{"usable": len(phoneMissing) == 0, "missing": phoneMissing},
+			"pc":    map[string]any{"usable": len(pcMissing) == 0, "missing": pcMissing},
+		},
 		"dashboard_url":         m.baseURL,
 		"mcp_url":               m.baseURL + "/mcp",
 		"workspace_root":        m.root,
+		"images_dir":            imgDir,
+		"instances_dir":         instRoot,
+		"config_path":           m.configPath,
 		"qemu_bin":              qemuBin,
-		"hdc_bin":               m.hdcPath,
+		"hdc_bin":               hdc,
 		"provisioned_userdata":  provReady,
 		"private_signing_ready": signReady,
 		"bridged_ready":         bridgedReady,
@@ -463,8 +605,9 @@ func (m *Manager) resolveRunning(name string) (*runningInstance, error) {
 }
 
 func (m *Manager) Launch(ctx context.Context, req LaunchRequest) (map[string]any, error) {
-	if missing := m.missingRequirements(); len(missing) > 0 {
-		return nil, fmt.Errorf("emulator runtime missing requirements: %s", strings.Join(missing, ", "))
+	profile := normalizeProfile(req.Profile)
+	if missing := m.missingRequirementsFor(profile); len(missing) > 0 {
+		return nil, fmt.Errorf("profile %q missing requirements: %s", profile, strings.Join(missing, ", "))
 	}
 	name, err := normalizeName(req.Instance)
 	if err != nil {
@@ -487,11 +630,14 @@ func (m *Manager) Launch(ctx context.Context, req LaunchRequest) (map[string]any
 		existing.lastUsed = time.Now()
 		return map[string]any{
 			"instance":   existing.name,
+			"profile":    existing.profile,
 			"reused":     true,
 			"hdc_target": fmt.Sprintf("127.0.0.1:%d", existing.hdcPort),
 			"udid":       existing.udid,
 			"display":    existing.display,
 			"net_mode":   existing.netMode,
+			"width":      existing.width,
+			"height":     existing.height,
 			"screen_url": fmt.Sprintf("%s/api/instances/%s/screen.png", m.baseURL, existing.name),
 			"stream_url": fmt.Sprintf("%s/api/instances/%s/stream", m.baseURL, existing.name),
 		}, nil
@@ -521,9 +667,29 @@ func (m *Manager) Launch(ctx context.Context, req LaunchRequest) (map[string]any
 	if netMode == "" {
 		netMode = "auto"
 	}
+	width, height := req.Width, req.Height
+	if profile == "pc" {
+		if width <= 0 {
+			width = 1920
+		}
+		if height <= 0 {
+			height = 1080
+		}
+	} else {
+		if width <= 0 {
+			width = 1080
+		}
+		if height <= 0 {
+			height = 2340
+		}
+	}
 	mem := req.MemoryMB
 	if mem <= 0 {
-		mem = 6144
+		if profile == "pc" {
+			mem = 8192
+		} else {
+			mem = 6144
+		}
 	}
 	smp := req.SMP
 	if smp <= 0 {
@@ -541,7 +707,12 @@ func (m *Manager) Launch(ctx context.Context, req LaunchRequest) (map[string]any
 		unlock = *req.Unlock
 	}
 
-	instDir := filepath.Join(m.root, "instances", name)
+	m.mu.Lock()
+	imgDir := m.imagesDir
+	instRoot := m.instancesDir
+	m.mu.Unlock()
+
+	instDir := filepath.Join(instRoot, name)
 	if err := os.MkdirAll(instDir, 0o755); err != nil {
 		return nil, err
 	}
@@ -560,6 +731,9 @@ func (m *Manager) Launch(ctx context.Context, req LaunchRequest) (map[string]any
 	}
 	cmd.Env = append(os.Environ(),
 		"HMOS7_ROOT="+m.root,
+		"HMOS7_IMAGES_DIR="+imgDir,
+		"HMOS7_INSTANCES_DIR="+instRoot,
+		"HMOS7_PROFILE="+profile,
 		"HMOS7_INSTANCE="+name,
 		"HMOS7_RESET="+resetFlag,
 		"HMOS7_HDC_PORT="+strconv.Itoa(hdcPort),
@@ -569,6 +743,8 @@ func (m *Manager) Launch(ctx context.Context, req LaunchRequest) (map[string]any
 		"HMOS7_NET="+netMode,
 		"HMOS7_MEMORY="+strconv.Itoa(mem),
 		"HMOS7_SMP="+strconv.Itoa(smp),
+		"HMOS7_WIDTH="+strconv.Itoa(width),
+		"HMOS7_HEIGHT="+strconv.Itoa(height),
 	)
 	if err := cmd.Start(); err != nil {
 		_ = errFile.Close()
@@ -577,6 +753,7 @@ func (m *Manager) Launch(ctx context.Context, req LaunchRequest) (map[string]any
 
 	inst := &runningInstance{
 		name:      name,
+		profile:   profile,
 		instDir:   instDir,
 		hdcPort:   hdcPort,
 		shellPort: shellPort,
@@ -584,6 +761,8 @@ func (m *Manager) Launch(ctx context.Context, req LaunchRequest) (map[string]any
 		display:   display,
 		netMode:   netMode,
 		peer:      peer,
+		width:     width,
+		height:    height,
 		cmd:       cmd,
 		stderrF:   errFile,
 		startedAt: time.Now(),
@@ -600,7 +779,9 @@ func (m *Manager) Launch(ctx context.Context, req LaunchRequest) (map[string]any
 	m.instances[name] = inst
 	m.mu.Unlock()
 
-	bootCtx, cancel := context.WithTimeout(ctx, time.Duration(timeoutSec)*time.Second)
+	// Detach boot wait from HTTP request cancellation so closing/refreshing the UI
+	// or an MCP client timeout never kills a booting QEMU instance.
+	bootCtx, cancel := context.WithTimeout(context.Background(), time.Duration(timeoutSec)*time.Second)
 	defer cancel()
 
 	target := fmt.Sprintf("127.0.0.1:%d", hdcPort)
@@ -618,8 +799,9 @@ func (m *Manager) Launch(ctx context.Context, req LaunchRequest) (map[string]any
 			tail, _ := os.ReadFile(filepath.Join(instDir, "qemu.stderr"))
 			return nil, fmt.Errorf("qemu exited early (%v): %s", inst.exitErr, strings.TrimSpace(string(tail)))
 		case <-bootCtx.Done():
-			_ = m.stopOne(context.Background(), name)
-			return nil, fmt.Errorf("timed out after %ds waiting for HarmonyOS 7 SceneBoard (hdc_ready=%v)", timeoutSec, hdcReady)
+			// Keep QEMU alive if it is still booting (e.g. first-boot BMS scan on blank userdata)
+			// rather than terminating a healthy VM out from under the operator.
+			goto doneBoot
 		case <-ticker.C:
 			if !hdcReady {
 				_, _ = m.runHDC(bootCtx, 5*time.Second, "tconn", target)
@@ -635,8 +817,11 @@ func (m *Manager) Launch(ctx context.Context, req LaunchRequest) (map[string]any
 			}
 		}
 	}
+doneBoot:
+	postCtx := context.Background()
 
-	if udidOut, err := m.hdcShell(bootCtx, target, 8*time.Second, "bm get --udid"); err == nil {
+	if hdcReady {
+		if udidOut, err := m.hdcShell(postCtx, target, 8*time.Second, "bm get --udid"); err == nil {
 		for _, line := range strings.Split(udidOut, "\n") {
 			l := strings.TrimSpace(line)
 			if len(l) == 64 {
@@ -644,22 +829,28 @@ func (m *Manager) Launch(ctx context.Context, req LaunchRequest) (map[string]any
 			}
 		}
 	}
+	}
 
 	unlocked := false
-	if unlock {
-		unlocked = m.wakeAndUnlock(bootCtx, target)
+	if unlock && sceneReady {
+		unlocked = m.wakeAndUnlock(postCtx, target)
 	}
 	inst.lastUsed = time.Now()
 
 	return map[string]any{
 		"instance":     inst.name,
+		"profile":      inst.profile,
 		"reused":       false,
 		"pid":          cmd.Process.Pid,
 		"hdc_target":   target,
+		"hdc_ready":    hdcReady,
+		"scene_ready":  sceneReady,
 		"shell_port":   shellPort,
 		"display":      display,
 		"net_mode":     netMode,
 		"peer":         peer,
+		"width":        inst.width,
+		"height":       inst.height,
 		"udid":         inst.udid,
 		"unlocked":     unlocked,
 		"boot_seconds": int(time.Since(inst.startedAt).Seconds()),

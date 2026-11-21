@@ -35,7 +35,7 @@ func TestEncodePPMToPNGAndJPEG(t *testing.T) {
 }
 
 func TestMCPEndpointInitializeListAndStatus(t *testing.T) {
-	mgr := NewManager(t.TempDir(), "/nonexistent/hdc", "http://127.0.0.1:18555")
+	mgr := NewManager(t.TempDir(), "/nonexistent/hdc", "http://127.0.0.1:18555", "", "")
 	post := func(body string) *httptest.ResponseRecorder {
 		req := httptest.NewRequest(http.MethodPost, "/mcp", bytes.NewBufferString(body))
 		req.Header.Set("Content-Type", "application/json")

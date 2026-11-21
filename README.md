@@ -7,13 +7,15 @@
 ## 核心特性
 
 - **双平台硬件虚拟化**：macOS arm64 自动启用 Apple **HVF**，Linux arm64 自动启用 **KVM**，冷启动约 11 秒直达 HarmonyOS 7.0.0.107 桌面（支持预置跳过 OOBE 镜像与稀疏快速克隆）。
+- **Phone 与 PC 双设备形态**：同一套 Linux 6.6 内核与 `initramfs`（自动兼容 `erofs` 与 PC `ext2/ext4` `sys_prod.img`），既支持 **Phone（Pura 70 Pro+ `7.0.0.107`，1080×2340）**，也支持真机 **鸿蒙 PC（MateBook Pro `HAD-W32 207.0.0.107 SP7`，1920×1080 多窗口桌面 + SmartDock）**。
+- **程序与大镜像分离（自定义路径）**：程序、脚本、Dashboard 和 LaunchAgent 可放在机内盘（约 40 MB），大体积镜像与实例数据盘通过 `--images-dir` / `--instances-dir`、`HMOS7_IMAGES_DIR` / `HMOS7_INSTANCES_DIR` 或 Web 控制台「路径与 MCP」页持久化保存到 `config.json`，随时指向外置 SSD。
 - **像素级清晰图形栈**：定制 `virtio-gpu` DRM/KMS 合成器（`native/display/`）+ 8 字节线性步幅对齐 `buffer_vdi`（彻底消除奇数宽度如 `153×153` 桌面图标斜切）+ SwiftShader Vulkan OHOS ICD 包装层（`native/vulkan/`）。
 - **真二层桥接以太网（零 NAT）**：
   - 机内独立拉起 `dhcp_client`（SA `1126`）+ `EthernetManager` + `NetConnManager` + `VpnManager` + `/dev/net/tun`。
   - 宿主机侧：macOS 通过 `socket_vmnet --vmnet-mode=bridged` 桥接物理网卡（如 `en0`），Linux 通过 `br0` + `qemu-bridge-helper` 桥接物理网卡；`hdc` 管理通道独立走 `hdc0`（`restrict=on` 本机回环转发，无默认路由、无 NAT）。
 - **AppGallery 标准化隐私放行**：内置可热切换的 `@kit.AppGalleryKit` `privacyManager` 代理（`native/framework/privacymanager_napi_qemu.c`），默认放行自签名调试应用（如 RustDesk/Resk），也可在控制台或 MCP 一键切换为未同意态用于回归测试。
 - **私有开发者 PKI 一键签名安装**：拖放或指定本地 `.hap` 文件，自动调用 `hap-sign-tool.jar` 签名并通过 `hdc install -r` 安装拉起。
-- **独立 `HarmonyEmulatorDashboard` + MCP**：纯 Go 标准库零外部依赖编译，提供实时 MJPEG 画面（点击=Tap、拖拽=Swipe）、物理按键与文字输入、HiLog / HDC Shell / 窗口树 / 网络 / 崩溃日志面板，以及 `/mcp` 8 个标准工具。
+- **独立 `HarmonyEmulatorDashboard` + MCP**：纯 Go 标准库零外部依赖编译，极简明暗双主题 Web 控制台，支持 Phone 竖屏 / PC 横屏自适应实时流、点击/拖拽交互、路径配置、HiLog / HDC Shell / 窗口树 / 网络 / 崩溃日志，以及 `/mcp` 8 个标准工具；QEMU 原生窗口默认启用 `full-grab=off,show-cursor=on` 不吸附鼠标。
 
 ---
 
@@ -92,7 +94,9 @@ sudo ./scripts/setup-bridged-linux.sh
 mkdir -p tools/signing
 
 # 1) 放入当前平台对应的 hdc（macOS arm64 放 mac 版，Linux arm64 放 linux 版）
+#    注意：macOS 版 hdc 需连同同级目录的 libusb_shared.dylib 一起拷贝！
 cp /path/to/sdk/default/openharmony/toolchains/hdc tools/hdc
+cp /path/to/sdk/default/openharmony/toolchains/libusb_shared.dylib tools/ 2>/dev/null || true
 chmod +x tools/hdc
 
 # 2) 放入全平台共用的签名 jar 与模板（从任意已装 SDK 的机器拷贝一份即可）

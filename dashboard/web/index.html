@@ -3,290 +3,414 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>HarmonyEmulatorDashboard · HarmonyOS 7 QEMU</title>
+<title>HarmonyEmulator</title>
 <style>
   :root {
-    --bg: #0c0f16;
-    --panel: #141923;
-    --panel-2: #1b2230;
-    --border: #273145;
-    --text: #e6edf7;
-    --muted: #8a99b5;
-    --accent: #3b82f6;
-    --accent-hover: #2563eb;
-    --ok: #22c55e;
-    --warn: #f59e0b;
-    --danger: #ef4444;
-    --mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-    --sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Segoe UI", sans-serif;
+    color-scheme: light dark;
+    --bg: #fafafa;
+    --surface: #ffffff;
+    --surface-2: #f4f4f5;
+    --stage-bg: #f1f1f3;
+    --border: rgba(0, 0, 0, 0.08);
+    --border-strong: rgba(0, 0, 0, 0.14);
+    --text: #18181b;
+    --text-2: #52525b;
+    --text-3: #71717a;
+    --accent: #18181b;
+    --accent-fg: #ffffff;
+    --accent-hover: #27272a;
+    --ok: #16a34a;
+    --warn: #d97706;
+    --danger: #dc2626;
+    --danger-soft: rgba(220, 38, 38, 0.08);
+    --ok-soft: rgba(22, 163, 74, 0.1);
+    --console-bg: #111113;
+    --console-fg: #d4d4d8;
+    --shadow-device: 0 24px 60px rgba(0, 0, 0, 0.14), 0 2px 8px rgba(0, 0, 0, 0.06);
+    --radius: 10px;
+    --radius-sm: 7px;
+    --sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter", "PingFang SC", sans-serif;
+    --mono: ui-monospace, "SF Mono", Menlo, Monaco, Consolas, monospace;
   }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #0e0e10;
+      --surface: #141417;
+      --surface-2: #1c1c21;
+      --stage-bg: #0a0a0c;
+      --border: rgba(255, 255, 255, 0.08);
+      --border-strong: rgba(255, 255, 255, 0.15);
+      --text: #f4f4f5;
+      --text-2: #a1a1aa;
+      --text-3: #71717a;
+      --accent: #f4f4f5;
+      --accent-fg: #09090b;
+      --accent-hover: #e4e4e7;
+      --ok: #22c55e;
+      --warn: #f59e0b;
+      --danger: #f87171;
+      --danger-soft: rgba(248, 113, 113, 0.12);
+      --ok-soft: rgba(34, 197, 94, 0.14);
+      --console-bg: #09090b;
+      --console-fg: #d4d4d8;
+      --shadow-device: 0 28px 72px rgba(0, 0, 0, 0.65), 0 0 0 1px rgba(255, 255, 255, 0.06);
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #0e0e10; --surface: #141417; --surface-2: #1c1c21; --stage-bg: #0a0a0c;
+    --border: rgba(255, 255, 255, 0.08); --border-strong: rgba(255, 255, 255, 0.15);
+    --text: #f4f4f5; --text-2: #a1a1aa; --text-3: #71717a;
+    --accent: #f4f4f5; --accent-fg: #09090b; --accent-hover: #e4e4e7;
+    --ok: #22c55e; --warn: #f59e0b; --danger: #f87171;
+    --danger-soft: rgba(248, 113, 113, 0.12); --ok-soft: rgba(34, 197, 94, 0.14);
+    --console-bg: #09090b; --console-fg: #d4d4d8;
+    --shadow-device: 0 28px 72px rgba(0, 0, 0, 0.65), 0 0 0 1px rgba(255, 255, 255, 0.06);
+  }
+
   * { box-sizing: border-box; }
-  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text); font-family: var(--sans); font-size: 13px; }
-  .app { display: grid; grid-template-rows: 52px 1fr; height: 100vh; overflow: hidden; }
+  html, body {
+    margin: 0; height: 100%; background: var(--bg); color: var(--text);
+    font-family: var(--sans); font-size: 13px; -webkit-font-smoothing: antialiased;
+  }
+
+  .shell { display: grid; grid-template-rows: 48px 1fr; height: 100vh; overflow: hidden; }
   header {
     display: flex; align-items: center; justify-content: space-between;
-    padding: 0 18px; border-bottom: 1px solid var(--border); background: var(--panel);
-    gap: 12px;
+    padding: 0 20px; border-bottom: 1px solid var(--border); background: var(--surface); gap: 16px;
   }
-  .brand { display: flex; align-items: center; gap: 10px; font-weight: 600; font-size: 14px; }
-  .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--muted); display: inline-block; }
-  .dot.ok { background: var(--ok); box-shadow: 0 0 8px rgba(34,197,94,.6); }
+  .brand { display: flex; align-items: center; gap: 10px; font-weight: 600; font-size: 13.5px; letter-spacing: -0.01em; }
+  .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--text-3); }
+  .dot.ok { background: var(--ok); }
   .dot.warn { background: var(--warn); }
-  .header-meta { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-  .pill {
-    display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px;
-    border-radius: 999px; background: var(--panel-2); border: 1px solid var(--border);
-    color: var(--muted); font-size: 12px; font-family: var(--mono);
-  }
-  .pill strong { color: var(--text); font-weight: 500; }
+  .meta-text { font-size: 12px; color: var(--text-3); font-weight: 400; }
+  .header-actions { display: flex; align-items: center; gap: 8px; }
+  .mono { font-family: var(--mono); font-variant-numeric: tabular-nums; }
 
-  .main { display: grid; grid-template-columns: 410px 1fr; height: 100%; overflow: hidden; }
-  @media (max-width: 960px) { .main { grid-template-columns: 1fr; overflow: auto; } }
+  .workspace { display: grid; grid-template-columns: minmax(380px, 44%) 1fr; height: 100%; overflow: hidden; }
+  .workspace.pc-active { grid-template-columns: minmax(520px, 56%) 1fr; }
+  @media (max-width: 980px) { .workspace, .workspace.pc-active { grid-template-columns: 1fr; overflow: auto; } }
 
-  /* Left: Interactive Phone Stage */
+  /* Left: Clean Device Stage */
   .stage {
-    display: flex; flex-direction: column; align-items: center; justify-content: flex-start;
-    padding: 14px; border-right: 1px solid var(--border); background: #090c12;
-    overflow-y: auto; gap: 10px;
+    display: flex; flex-direction: column; align-items: center; justify-content: space-between;
+    padding: 16px 24px 18px; background: var(--stage-bg); border-right: 1px solid var(--border);
+    overflow-y: auto; gap: 14px;
   }
-  .stage-bar {
-    width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  .stage-top { width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+  .stage-title { display: flex; align-items: center; gap: 8px; font-size: 12.5px; font-weight: 500; }
+  .tag {
+    display: inline-flex; align-items: center; padding: 2px 7px; border-radius: 999px;
+    font-size: 11px; color: var(--text-2); background: var(--surface); border: 1px solid var(--border);
   }
-  .phone-bezel {
-    position: relative; width: 320px; aspect-ratio: 1080 / 2340;
-    border-radius: 28px; overflow: hidden; background: #000;
-    border: 3px solid #2b354b; box-shadow: 0 18px 48px rgba(0,0,0,.6);
-    user-select: none; touch-action: none; cursor: crosshair; flex-shrink: 0;
+  .tag.ok { color: var(--ok); background: var(--ok-soft); border-color: transparent; }
+
+  .device-wrap {
+    flex: 1; display: flex; align-items: center; justify-content: center;
+    width: 100%; min-height: 0; padding: 6px 0; overflow: hidden;
   }
-  .phone-bezel img {
-    width: 100%; height: 100%; object-fit: contain; display: block; pointer-events: none;
+  .device-frame {
+    position: relative;
+    height: min(560px, 100%); width: auto; max-width: 100%;
+    aspect-ratio: 1080 / 2340;
+    border-radius: 26px; overflow: hidden; background: #09090b;
+    box-shadow: var(--shadow-device); user-select: none; touch-action: none; cursor: crosshair;
+    transition: width .22s ease, height .22s ease, border-radius .22s ease;
   }
-  .phone-empty {
+  .device-frame.pc-mode {
+    width: min(680px, 100%); height: auto; max-height: 100%;
+    aspect-ratio: 16 / 9; border-radius: 12px;
+  }
+  .device-frame img { width: 100%; height: 100%; object-fit: contain; display: block; pointer-events: none; }
+  .device-empty {
     position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center;
-    justify-content: center; gap: 10px; color: var(--muted); text-align: center; padding: 24px;
+    justify-content: center; gap: 6px; color: #71717a; text-align: center; padding: 28px;
   }
+  .device-empty strong { color: #d4d4d8; font-weight: 500; font-size: 13px; }
   .coord-hud {
-    position: absolute; bottom: 8px; left: 50%; transform: translateX(-50%);
-    background: rgba(12,15,22,.82); border: 1px solid var(--border); color: #dbeafe;
-    font-family: var(--mono); font-size: 11px; padding: 2px 8px; border-radius: 999px;
-    pointer-events: none; opacity: 0; transition: opacity .15s;
+    position: absolute; bottom: 10px; left: 50%; transform: translateX(-50%);
+    background: rgba(15, 15, 18, 0.78); backdrop-filter: blur(8px);
+    color: #f4f4f5; font-family: var(--mono); font-size: 11px; padding: 3px 9px;
+    border-radius: 999px; pointer-events: none; opacity: 0; transition: opacity .15s;
   }
-  .phone-bezel:hover .coord-hud { opacity: 1; }
+  .device-frame:hover .coord-hud { opacity: 1; }
   .ripple {
-    position: absolute; width: 22px; height: 22px; margin: -11px 0 0 -11px;
-    border-radius: 50%; border: 2px solid #60a5fa; background: rgba(59,130,246,.3);
-    pointer-events: none; animation: rip .45s ease-out forwards;
+    position: absolute; width: 20px; height: 20px; margin: -10px 0 0 -10px;
+    border-radius: 50%; border: 1.5px solid #ffffff; background: rgba(255,255,255,0.28);
+    pointer-events: none; animation: rip .4s ease-out forwards;
   }
-  @keyframes rip { from { transform: scale(.4); opacity: 1; } to { transform: scale(2); opacity: 0; } }
+  @keyframes rip { from { transform: scale(.45); opacity: 1; } to { transform: scale(1.9); opacity: 0; } }
 
-  .controls-row {
-    width: 320px; display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px;
+  .stage-dock { width: 100%; max-width: 440px; display: flex; flex-direction: column; gap: 8px; flex-shrink: 0; }
+  .dock-bar {
+    display: flex; align-items: center; justify-content: center; gap: 4px;
+    padding: 4px; border-radius: 10px; background: var(--surface); border: 1px solid var(--border);
   }
-  .text-row { width: 320px; display: flex; gap: 6px; }
-  .text-row input { flex: 1; }
+  .dock-btn {
+    flex: 1; display: inline-flex; align-items: center; justify-content: center;
+    height: 30px; padding: 0 6px; white-space: nowrap; border: none; border-radius: 6px; background: transparent;
+    color: var(--text-2); font-size: 12px; font-weight: 500; cursor: pointer;
+  }
+  .dock-btn:hover { background: var(--surface-2); color: var(--text); }
+  .text-send { display: flex; gap: 6px; }
+  .text-send input { flex: 1; }
 
-  /* Right: Workbench */
-  .work { display: flex; flex-direction: column; overflow: hidden; }
-  .cards {
-    display: grid; grid-template-columns: repeat(auto-fit, minmax(310px, 1fr));
-    gap: 12px; padding: 14px; border-bottom: 1px solid var(--border);
-    max-height: 46vh; overflow-y: auto;
+  /* Right: Airy Segmented Panel */
+  .inspector { display: flex; flex-direction: column; background: var(--surface); overflow: hidden; }
+  .nav-strip {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 10px 20px; border-bottom: 1px solid var(--border); gap: 12px;
   }
-  .card {
-    background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
-    padding: 12px 14px; display: flex; flex-direction: column; gap: 10px;
+  .seg { display: inline-flex; padding: 3px; border-radius: 8px; background: var(--surface-2); gap: 2px; }
+  .seg button {
+    border: none; background: transparent; color: var(--text-2); padding: 5px 12px;
+    border-radius: 6px; font-size: 12.5px; font-weight: 500; cursor: pointer;
   }
-  .card h3 {
-    margin: 0; font-size: 13px; font-weight: 600; display: flex; align-items: center;
-    justify-content: space-between; gap: 8px;
-  }
-  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .seg button.active { background: var(--surface); color: var(--text); box-shadow: 0 1px 2px rgba(0,0,0,0.06); }
+
+  .pane { flex: 1; overflow-y: auto; padding: 20px 24px; display: none; flex-direction: column; gap: 22px; }
+  .pane.active { display: flex; }
+
+  .section { display: flex; flex-direction: column; gap: 12px; }
+  .section-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+  .section-title { font-size: 12px; font-weight: 600; color: var(--text-2); letter-spacing: 0.01em; }
+  .divider { height: 1px; background: var(--border); margin: 2px 0; }
+
+  .form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+  label.field { display: flex; flex-direction: column; gap: 5px; font-size: 12px; color: var(--text-2); }
+  label.field.full { grid-column: 1 / -1; }
   .row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-  label.field { display: flex; flex-direction: column; gap: 4px; font-size: 11px; color: var(--muted); }
-  input, select, button {
-    font-family: inherit; font-size: 12px; border-radius: 6px;
-    border: 1px solid var(--border); background: var(--panel-2); color: var(--text);
-    padding: 6px 9px; outline: none;
+  .between { justify-content: space-between; }
+
+  input, select {
+    height: 32px; padding: 0 10px; border-radius: var(--radius-sm);
+    border: 1px solid var(--border-strong); background: var(--surface); color: var(--text);
+    font-family: inherit; font-size: 12.5px; outline: none; transition: border-color .12s;
   }
-  input:focus, select:focus { border-color: var(--accent); }
-  button { cursor: pointer; font-weight: 500; transition: background .12s, border-color .12s; }
-  button:hover:not(:disabled) { border-color: #475878; background: #222b3d; }
-  button:disabled { opacity: .45; cursor: not-allowed; }
-  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
-  button.primary:hover:not(:disabled) { background: var(--accent-hover); }
-  button.danger { background: rgba(239,68,68,.15); border-color: rgba(239,68,68,.45); color: #fca5a5; }
-  button.danger:hover:not(:disabled) { background: rgba(239,68,68,.28); }
-  button.ok { background: rgba(34,197,94,.16); border-color: rgba(34,197,94,.45); color: #86efac; }
+  select {
+    appearance: none; -webkit-appearance: none; padding-right: 26px; cursor: pointer;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2371717a' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+    background-repeat: no-repeat; background-position: right 8px center;
+  }
+  input:focus, select:focus { border-color: var(--text); }
+
+  button.btn {
+    display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+    height: 32px; padding: 0 12px; border-radius: var(--radius-sm);
+    border: 1px solid var(--border-strong); background: var(--surface); color: var(--text);
+    font-family: inherit; font-size: 12.5px; font-weight: 500; cursor: pointer;
+    transition: background .12s, border-color .12s, opacity .12s;
+  }
+  button.btn:hover:not(:disabled) { background: var(--surface-2); }
+  button.btn:disabled { opacity: 0.45; cursor: not-allowed; }
+  button.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-fg); }
+  button.btn.primary:hover:not(:disabled) { background: var(--accent-hover); }
+  button.btn.ghost { border-color: transparent; background: transparent; color: var(--text-2); }
+  button.btn.ghost:hover:not(:disabled) { background: var(--surface-2); color: var(--text); }
+  button.btn.danger { border-color: transparent; background: var(--danger-soft); color: var(--danger); }
+  button.btn.sm { height: 28px; padding: 0 10px; font-size: 12px; }
 
   .inst-list { display: flex; flex-direction: column; gap: 6px; }
-  .inst-item {
-    display: flex; align-items: center; justify-content: space-between; gap: 8px;
-    padding: 7px 10px; border-radius: 7px; background: var(--panel-2); border: 1px solid var(--border);
-    cursor: pointer;
+  .inst-row {
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    padding: 10px 12px; border-radius: var(--radius); border: 1px solid var(--border);
+    background: var(--surface); cursor: pointer; transition: border-color .12s, background .12s;
   }
-  .inst-item.active { border-color: var(--accent); background: rgba(59,130,246,.12); }
-  .inst-meta { font-family: var(--mono); font-size: 11px; color: var(--muted); }
+  .inst-row:hover { background: var(--surface-2); }
+  .inst-row.active { border-color: var(--text); background: var(--surface-2); }
+  .inst-sub { font-size: 11.5px; color: var(--text-3); margin-top: 2px; }
 
-  /* Tabs & Terminal Output */
-  .tabs {
-    display: flex; align-items: center; gap: 4px; padding: 8px 14px 0;
-    border-bottom: 1px solid var(--border); background: var(--panel);
+  .dropzone {
+    border: 1px dashed var(--border-strong); border-radius: var(--radius);
+    padding: 18px 14px; text-align: center; color: var(--text-2); cursor: pointer;
+    background: var(--surface-2); transition: border-color .15s;
   }
-  .tab {
-    padding: 7px 12px; border: 1px solid transparent; border-bottom: none;
-    border-radius: 7px 7px 0 0; background: transparent; color: var(--muted);
+  .dropzone.over, .dropzone:hover { border-color: var(--text); color: var(--text); }
+
+  .switch-row {
+    display: flex; align-items: center; justify-content: space-between; gap: 14px;
+    padding: 12px 14px; border-radius: var(--radius); border: 1px solid var(--border);
   }
-  .tab.active { background: var(--bg); color: var(--text); border-color: var(--border); }
-  .tab-body { flex: 1; display: flex; flex-direction: column; overflow: hidden; padding: 10px 14px; gap: 8px; }
+  .switch-desc { font-size: 11.5px; color: var(--text-3); margin-top: 2px; }
+
+  .chk { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-2); cursor: pointer; }
+  .chk input { width: 14px; height: 14px; accent-color: var(--text); }
+
+  .console-wrap { flex: 1; display: flex; flex-direction: column; gap: 10px; min-height: 280px; }
   pre.console {
-    flex: 1; margin: 0; padding: 10px 12px; background: #080b10; border: 1px solid var(--border);
-    border-radius: 8px; overflow: auto; font-family: var(--mono); font-size: 11.5px; line-height: 1.48;
-    white-space: pre-wrap; word-break: break-word; color: #cbd5e1;
+    flex: 1; margin: 0; padding: 14px 16px; border-radius: var(--radius);
+    background: var(--console-bg); color: var(--console-fg); border: 1px solid var(--border);
+    font-family: var(--mono); font-size: 11.5px; line-height: 1.55;
+    overflow: auto; white-space: pre-wrap; word-break: break-word; min-height: 260px;
   }
   .toast {
-    position: fixed; right: 16px; bottom: 16px; padding: 9px 14px; border-radius: 8px;
-    background: #1e293b; border: 1px solid var(--border); color: var(--text);
-    box-shadow: 0 10px 28px rgba(0,0,0,.5); font-size: 12px; z-index: 99;
-    opacity: 0; pointer-events: none; transition: opacity .18s;
+    position: fixed; right: 20px; bottom: 20px; padding: 9px 14px; border-radius: 8px;
+    background: var(--accent); color: var(--accent-fg); font-size: 12px; font-weight: 500;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.2); opacity: 0; transform: translateY(6px);
+    pointer-events: none; transition: opacity .16s, transform .16s; z-index: 99;
   }
-  .toast.show { opacity: 1; }
-  .dropzone {
-    border: 1px dashed var(--border); border-radius: 8px; padding: 10px;
-    text-align: center; color: var(--muted); font-size: 12px; cursor: pointer;
-  }
-  .dropzone.over { border-color: var(--accent); color: var(--text); background: rgba(59,130,246,.08); }
-  .chk { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; color: var(--muted); cursor: pointer; }
+  .toast.show { opacity: 1; transform: translateY(0); }
 </style>
 </head>
 <body>
-<div class="app">
+<div class="shell">
   <header>
     <div class="brand">
       <span id="healthDot" class="dot"></span>
-      <span>HarmonyEmulatorDashboard</span>
-      <span class="pill">HarmonyOS <strong>7.0.0.107</strong> · Linux 6.6 · QEMU HVF</span>
+      <span>HarmonyEmulator</span>
+      <span id="hostMeta" class="meta-text mono">HarmonyOS 7 · QEMU</span>
     </div>
-    <div class="header-meta">
-      <span class="pill">MCP: <strong id="mcpUrlText">http://127.0.0.1:18555/mcp</strong></span>
-      <button onclick="copyMcpUrl()">复制 MCP 地址</button>
-      <button onclick="refreshStatus()">刷新状态</button>
+    <div class="header-actions">
+      <button class="btn sm ghost mono" id="mcpCopyBtn" onclick="copyMcpUrl()">MCP</button>
+      <button class="btn sm ghost" onclick="toggleTheme()" title="切换明暗主题">主题</button>
+      <button class="btn sm" onclick="refreshStatus()">刷新</button>
     </div>
   </header>
 
-  <div class="main">
-    <!-- Left: Interactive Phone Viewport -->
+  <div id="workspace" class="workspace">
+    <!-- Left: Interactive Device Viewport -->
     <section class="stage">
-      <div class="stage-bar">
-        <div class="row">
-          <strong id="activeInstLabel">未选中实例</strong>
-          <span id="streamState" class="pill">离线</span>
+      <div class="stage-top">
+        <div class="stage-title">
+          <span id="activeInstLabel">未运行实例</span>
+          <span id="streamState" class="tag">离线</span>
         </div>
         <div class="row">
-          <select id="fpsSelect" title="实时流帧率" onchange="reconnectStream()">
+          <select id="fpsSelect" style="height:28px;font-size:12px" onchange="reconnectStream()">
             <option value="5" selected>5 FPS</option>
             <option value="8">8 FPS</option>
             <option value="2">2 FPS</option>
-            <option value="0">手动截图</option>
+            <option value="0">手动</option>
           </select>
-          <button onclick="refreshOneFrame()">单帧</button>
+          <button class="btn sm" onclick="refreshOneFrame()">单帧</button>
         </div>
       </div>
 
-      <div id="phone" class="phone-bezel">
-        <img id="screenImg" alt="HarmonyOS 7 Live Screen" style="display:none" />
-        <div id="phoneEmpty" class="phone-empty">
-          <div style="font-size:28px;opacity:.6">📱</div>
-          <div>启动或选择一个运行中的 HarmonyOS 7 实例</div>
-          <div style="font-size:11px">支持在画面上直接点击（Tap）和拖拽（Swipe）</div>
+      <div class="device-wrap">
+        <div id="phone" class="device-frame">
+          <img id="screenImg" alt="HarmonyOS Live Screen" style="display:none" />
+          <div id="phoneEmpty" class="device-empty">
+            <strong>暂无活动画面</strong>
+            <span>在右侧启动 Phone 或 PC 实例后，可在此直接点击或拖拽操作</span>
+          </div>
+          <div id="coordHud" class="coord-hud">0, 0</div>
         </div>
-        <div id="coordHud" class="coord-hud">0, 0</div>
       </div>
 
-      <div class="controls-row">
-        <button onclick="sendKey('back')">◀ 返回</button>
-        <button onclick="sendKey('home')">● 桌面</button>
-        <button onclick="sendAct({action:'wake'})">☀ 唤醒解锁</button>
-        <button onclick="sendKey('power')">⏻ 电源</button>
-      </div>
-      <div class="controls-row">
-        <button onclick="sendKey('volume_down')">🔉 音量-</button>
-        <button onclick="sendKey('volume_up')">🔊 音量+</button>
-        <button onclick="sendKey('enter')">↵ 回车</button>
-        <button onclick="downloadPng()">⬇ PNG</button>
-      </div>
-      <div class="text-row">
-        <input id="textInput" placeholder="输入文字发送到当前焦点输入框..." onkeydown="if(event.key==='Enter')sendText()" />
-        <button class="primary" onclick="sendText()">发送</button>
+      <div class="stage-dock">
+        <div class="dock-bar">
+          <button class="dock-btn" onclick="sendKey('back')">返回</button>
+          <button class="dock-btn" onclick="sendKey('home')">桌面</button>
+          <button class="dock-btn" onclick="sendAct({action:'wake'})">唤醒</button>
+          <button class="dock-btn" onclick="sendKey('power')">电源</button>
+          <button class="dock-btn" onclick="sendKey('volume_down')">音量-</button>
+          <button class="dock-btn" onclick="sendKey('volume_up')">音量+</button>
+          <button class="dock-btn" onclick="downloadPng()">截图</button>
+        </div>
+        <div class="text-send">
+          <input id="textInput" placeholder="向焦点输入框发送文本..." onkeydown="if(event.key==='Enter')sendText()" />
+          <button class="btn" onclick="sendText()">发送</button>
+        </div>
       </div>
     </section>
 
-    <!-- Right: Instance / App / Debug Workbench -->
-    <section class="work">
-      <div class="cards">
-        <!-- Instance Management -->
-        <div class="card">
-          <h3>
-            <span>实例管理</span>
-            <button class="danger" onclick="stopAll()">全部停止</button>
-          </h3>
+    <!-- Right: Focused Segmented Inspector -->
+    <section class="inspector">
+      <div class="nav-strip">
+        <div class="seg" role="tablist">
+          <button class="active" data-pane="instances" onclick="switchPane('instances')">实例</button>
+          <button data-pane="apps" onclick="switchPane('apps')">应用</button>
+          <button data-pane="debug" onclick="switchPane('debug')">调试</button>
+          <button data-pane="storage" onclick="switchPane('storage')">路径与 MCP</button>
+        </div>
+        <div class="row">
+          <span id="profileBadges" class="meta-text"></span>
+        </div>
+      </div>
+
+      <!-- Pane 1: Instances -->
+      <div id="pane-instances" class="pane active">
+        <div class="section">
+          <div class="section-head">
+            <span class="section-title">运行中的实例</span>
+            <button class="btn sm danger" onclick="stopAll()">全部停止</button>
+          </div>
           <div id="instList" class="inst-list"></div>
-          <div class="grid2">
-            <label class="field">实例名
-              <input id="launchName" value="m2test" placeholder="default / m2test" />
+        </div>
+
+        <div class="divider"></div>
+
+        <div class="section">
+          <div class="section-head">
+            <span class="section-title">启动或复用实例</span>
+          </div>
+          <div class="form-grid">
+            <label class="field">实例名称
+              <input id="launchName" value="m2test" placeholder="default / m2test / pc1" />
             </label>
-            <label class="field">显示模式
+            <label class="field">设备形态
+              <select id="launchProfile" onchange="onProfileChange()">
+                <option value="phone" selected>Phone · 1080 × 2340</option>
+                <option value="pc">PC · 1920 × 1080</option>
+              </select>
+            </label>
+            <label class="field">显示方式
               <select id="launchDisplay">
-                <option value="none" selected>none (无头/Web流)</option>
-                <option value="cocoa">cocoa (原生窗口)</option>
-                <option value="vnc">vnc (127.0.0.1:5921)</option>
+                <option value="none" selected>无头（Web 实时画面）</option>
+                <option value="cocoa">macOS 原生窗口</option>
+                <option value="vnc">VNC (127.0.0.1:5921)</option>
               </select>
             </label>
             <label class="field">以太网模式
               <select id="launchNet">
-                <option value="auto" selected>auto (优先桥接 → vmnet)</option>
-                <option value="bridged">bridged (二层桥接 en0)</option>
-                <option value="shared">shared (vmnet 192.168.105.x)</option>
-                <option value="user">user (SLIRP 兜底)</option>
+                <option value="auto" selected>自动（优先桥接）</option>
+                <option value="bridged">二层桥接（无 NAT）</option>
+                <option value="shared">vmnet 共享网段</option>
+                <option value="user">SLIRP 兜底</option>
               </select>
-            </label>
-            <label class="field">双机 LAN (Peer)
-              <input id="launchPeer" value="off" placeholder="off / listen:6666 / connect:6666" />
             </label>
             <label class="field">内存 (MiB) / vCPU
               <div class="row">
-                <input id="launchMem" type="number" value="6144" style="width:82px" />
-                <input id="launchSmp" type="number" value="4" style="width:58px" />
+                <input id="launchMem" type="number" value="6144" style="width:96px" />
+                <input id="launchSmp" type="number" value="4" style="width:68px" />
               </div>
             </label>
+            <label class="field">双机直连 (Peer)
+              <input id="launchPeer" value="off" placeholder="off / listen:6666 / connect:6666" />
+            </label>
           </div>
-          <div class="row" style="justify-content:space-between">
-            <label class="chk"><input id="launchReset" type="checkbox" /> 重置为干净跳过 OOBE 镜像</label>
-            <button id="launchBtn" class="primary" onclick="launchInstance()">▶ 启动 / 复用实例</button>
+          <div class="row between" style="margin-top:4px">
+            <label class="chk"><input id="launchReset" type="checkbox" /> 重置用户数据分区</label>
+            <button id="launchBtn" class="btn primary" onclick="launchInstance()">启动实例</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Pane 2: Apps & Privacy -->
+      <div id="pane-apps" class="pane">
+        <div class="section">
+          <div class="section-head"><span class="section-title">常用应用</span></div>
+          <div class="row">
+            <button class="btn" onclick="launchApp('top.frankhan.easytier','EntryAbility')">EasyTier</button>
+            <button class="btn" onclick="launchApp('top.frankhan.resk','EntryAbility')">Resk</button>
+            <button class="btn" onclick="launchApp('com.huawei.hmos.settings','com.huawei.hmos.settings.MainAbility')">系统设置</button>
+          </div>
+          <div class="row">
+            <input id="customBundle" placeholder="输入 BundleName，例如 top.frankhan.resk" style="flex:1" />
+            <button class="btn" onclick="launchCustomApp()">拉起</button>
+            <button class="btn danger" onclick="stopCustomApp()">强停</button>
           </div>
         </div>
 
-        <!-- Apps, HAP Installer & Privacy Toggle -->
-        <div class="card">
-          <h3>
-            <span>应用调试 &amp; HAP 自签名安装</span>
-            <button id="privacyBtn" class="ok" onclick="togglePrivacy()" title="控制 @kit.AppGalleryKit privacyManager 自动同意状态">隐私自动同意: 未知</button>
-          </h3>
+        <div class="divider"></div>
+
+        <div class="section">
+          <div class="section-head"><span class="section-title">安装与自动签名 (.hap)</span></div>
           <div class="row">
-            <button onclick="launchApp('top.frankhan.easytier','EntryAbility')">🚀 EasyTier</button>
-            <button onclick="launchApp('top.frankhan.resk','EntryAbility')">🖥 Resk (RustDesk)</button>
-            <button onclick="launchApp('com.huawei.hmos.settings','com.huawei.hmos.settings.MainAbility')">⚙ 系统设置</button>
-          </div>
-          <div class="row">
-            <input id="customBundle" placeholder="BundleName (如 top.frankhan.resk)" style="flex:1" />
-            <button onclick="launchCustomApp()">拉起</button>
-            <button class="danger" onclick="stopCustomApp()">强停</button>
-          </div>
-          <div class="row">
-            <input id="hapPath" placeholder="宿主机 .hap 路径，或拖放 .hap 到下方..." style="flex:1" />
-            <button class="primary" onclick="installByPath()">安装</button>
+            <input id="hapPath" placeholder="宿主机 .hap 文件路径" style="flex:1" />
+            <button class="btn primary" onclick="installByPath()">安装</button>
           </div>
           <div id="dropzone" class="dropzone" onclick="document.getElementById('hapFile').click()">
-            点击或拖放本地 .hap 文件上传、自动私有 PKI 签名并安装
+            点击或拖放本地 .hap 文件，自动使用私有 PKI 签名并安装
             <input id="hapFile" type="file" accept=".hap" style="display:none" onchange="uploadHap(this.files[0])" />
           </div>
           <div class="row">
@@ -294,22 +418,71 @@
             <label class="chk"><input id="launchAfterChk" type="checkbox" checked /> 安装后自动拉起</label>
           </div>
         </div>
+
+        <div class="divider"></div>
+
+        <div class="section">
+          <div class="section-head"><span class="section-title">系统开关</span></div>
+          <div class="switch-row">
+            <div>
+              <div style="font-weight:500">AppGallery 标准化隐私自动同意</div>
+              <div class="switch-desc">控制 @kit.AppGalleryKit privacyManager，默认放行自签名应用，关闭可测试未同意态</div>
+            </div>
+            <button id="privacyBtn" class="btn sm" onclick="togglePrivacy()">检测中</button>
+          </div>
+        </div>
       </div>
 
-      <!-- Inspector Tabs -->
-      <div class="tabs">
-        <button class="tab active" data-tab="hilog" onclick="selectTab('hilog')">HiLog 日志</button>
-        <button class="tab" data-tab="shell" onclick="selectTab('shell')">HDC Shell</button>
-        <button class="tab" data-tab="status" onclick="selectTab('status')">系统状态</button>
-        <button class="tab" data-tab="windows" onclick="selectTab('windows')">窗口树</button>
-        <button class="tab" data-tab="network" onclick="selectTab('network')">网络 / TUN</button>
-        <button class="tab" data-tab="faultlogs" onclick="selectTab('faultlogs')">崩溃日志</button>
-        <button class="tab" data-tab="mcp" onclick="selectTab('mcp')">MCP 接入</button>
+      <!-- Pane 3: Debug Console -->
+      <div id="pane-debug" class="pane">
+        <div class="row between">
+          <div class="seg" id="debugTabs">
+            <button class="active" data-tab="hilog" onclick="selectDebugTab('hilog')">HiLog</button>
+            <button data-tab="shell" onclick="selectDebugTab('shell')">Shell</button>
+            <button data-tab="status" onclick="selectDebugTab('status')">状态</button>
+            <button data-tab="windows" onclick="selectDebugTab('windows')">窗口</button>
+            <button data-tab="network" onclick="selectDebugTab('network')">网络</button>
+            <button data-tab="faultlogs" onclick="selectDebugTab('faultlogs')">崩溃</button>
+          </div>
+        </div>
+        <div id="debugToolbar" class="row"></div>
+        <div class="console-wrap">
+          <pre id="consoleOut" class="console">就绪。</pre>
+        </div>
       </div>
 
-      <div class="tab-body">
-        <div id="tabToolbar" class="row"></div>
-        <pre id="consoleOut" class="console">就绪。点击「▶ 启动 / 复用实例」启动 HarmonyOS 7.0.0.107 模拟器。</pre>
+      <!-- Pane 4: Storage Paths & MCP -->
+      <div id="pane-storage" class="pane">
+        <div class="section">
+          <div class="section-head">
+            <span class="section-title">镜像与实例存储路径（持久化保存至 config.json）</span>
+          </div>
+          <div class="form-grid">
+            <label class="field full">镜像根目录 (images_dir)
+              <input id="cfgImagesDir" class="mono" placeholder="/Volumes/FanXiangS100/HarmonyEmulatorData/images" />
+            </label>
+            <label class="field full">实例数据目录 (instances_dir)
+              <input id="cfgInstancesDir" class="mono" placeholder="/Volumes/FanXiangS100/HarmonyEmulatorData/instances" />
+            </label>
+            <label class="field full">hdc 可执行文件路径 (留空自动探测)
+              <input id="cfgHdcPath" class="mono" placeholder="/Users/frankhan/HarmonyEmulator/tools/hdc" />
+            </label>
+          </div>
+          <div class="row between">
+            <span id="cfgPathNote" class="meta-text mono"></span>
+            <button class="btn primary" onclick="saveConfig()">保存路径配置</button>
+          </div>
+        </div>
+
+        <div class="divider"></div>
+
+        <div class="section">
+          <div class="section-head">
+            <span class="section-title">MCP 接入配置</span>
+            <button class="btn sm" onclick="copyMcpUrl()">复制地址</button>
+          </div>
+          <pre id="mcpSnippet" class="console" style="min-height:180px"></pre>
+        </div>
       </div>
     </section>
   </div>
@@ -318,11 +491,29 @@
 <div id="toast" class="toast"></div>
 
 <script>
-const W = 1080, H = 2340;
-let state = { status: null, active: '', tab: 'hilog', privacyAutoAgree: true };
+let state = {
+  status: null,
+  active: '',
+  width: 1080,
+  height: 2340,
+  profile: 'phone',
+  pane: 'instances',
+  debugTab: 'hilog',
+  privacyAutoAgree: true,
+  configLoaded: false,
+};
 let dragStart = null;
 
-function toast(msg, ms = 2600) {
+function toggleTheme() {
+  const cur = document.documentElement.getAttribute('data-theme');
+  const next = cur === 'dark' ? 'light' : 'dark';
+  document.documentElement.setAttribute('data-theme', next);
+  localStorage.setItem('he-theme', next);
+}
+const savedTheme = localStorage.getItem('he-theme');
+if (savedTheme) document.documentElement.setAttribute('data-theme', savedTheme);
+
+function toast(msg, ms = 2400) {
   const el = document.getElementById('toast');
   el.textContent = msg;
   el.classList.add('show');
@@ -343,19 +534,64 @@ function setOut(text) {
   document.getElementById('consoleOut').textContent = text || '(空输出)';
 }
 
+function switchPane(name) {
+  state.pane = name;
+  document.querySelectorAll('.nav-strip .seg button').forEach(b => b.classList.toggle('active', b.dataset.pane === name));
+  document.querySelectorAll('.pane').forEach(p => p.classList.toggle('active', p.id === 'pane-' + name));
+  if (name === 'storage') loadMcpInfo();
+}
+
+function onProfileChange() {
+  const p = document.getElementById('launchProfile').value;
+  document.getElementById('launchMem').value = p === 'pc' ? 8192 : 6144;
+  if (p === 'pc' && document.getElementById('launchName').value === 'm2test') {
+    document.getElementById('launchName').value = 'pc1';
+  } else if (p === 'phone' && document.getElementById('launchName').value === 'pc1') {
+    document.getElementById('launchName').value = 'm2test';
+  }
+}
+
+function applyViewportShape(inst) {
+  const frame = document.getElementById('phone');
+  const ws = document.getElementById('workspace');
+  const isPC = inst && (inst.profile === 'pc' || (inst.width > inst.height));
+  state.width = inst?.width || (isPC ? 1920 : 1080);
+  state.height = inst?.height || (isPC ? 1080 : 2340);
+  state.profile = inst?.profile || 'phone';
+  frame.classList.toggle('pc-mode', !!isPC);
+  ws.classList.toggle('pc-active', !!isPC);
+  frame.style.aspectRatio = `${state.width} / ${state.height}`;
+}
+
 async function refreshStatus() {
   try {
     const st = await api('/api/status');
     state.status = st;
-    document.getElementById('mcpUrlText').textContent = st.mcp_url;
-    const dot = document.getElementById('healthDot');
-    dot.className = 'dot ' + (st.usable ? 'ok' : 'warn');
+    document.getElementById('mcpCopyBtn').textContent = `MCP · ${st.mcp_url.replace(/^https?:\/\//, '')}`;
+    document.getElementById('hostMeta').textContent = `${st.host_os}/${st.host_arch} · ${(st.accel || '').toUpperCase()} · ${st.bridged_ready ? '已桥接' : '未桥接'}`;
+    document.getElementById('healthDot').className = 'dot ' + (st.usable ? 'ok' : 'warn');
+
+    const pPhone = st.profiles?.phone?.usable;
+    const pPC = st.profiles?.pc?.usable;
+    document.getElementById('profileBadges').textContent = `Phone ${pPhone ? '就绪' : '缺镜像'} · PC ${pPC ? '就绪' : '未导入'}`;
+
+    if (!state.configLoaded) {
+      document.getElementById('cfgImagesDir').value = st.images_dir || '';
+      document.getElementById('cfgInstancesDir').value = st.instances_dir || '';
+      document.getElementById('cfgHdcPath').value = st.hdc_bin || '';
+      document.getElementById('cfgPathNote').textContent = st.config_path || '';
+      state.configLoaded = true;
+    }
 
     const running = st.running_instances || [];
     const saved = st.saved_instances || [];
     if (!state.active || !running.some(x => x.name === state.active)) {
       state.active = running[0]?.name || '';
+      const activeObj = running.find(x => x.name === state.active);
+      applyViewportShape(activeObj);
       reconnectStream();
+    } else {
+      applyViewportShape(running.find(x => x.name === state.active));
     }
     renderInstances(running, saved);
     if (state.active) refreshPrivacy();
@@ -369,24 +605,33 @@ function renderInstances(running, saved) {
   el.innerHTML = '';
   if (running.length === 0) {
     const div = document.createElement('div');
-    div.className = 'inst-meta';
+    div.className = 'meta-text';
     div.textContent = saved.length
-      ? `无运行中实例（已有磁盘实例: ${saved.join(', ')}）`
-      : '无运行中实例，点击下方按钮启动。';
+      ? `暂无运行中实例 · 已保存数据盘：${saved.join(', ')}`
+      : '暂无运行中实例';
     el.appendChild(div);
-    document.getElementById('activeInstLabel').textContent = '未运行';
+    document.getElementById('activeInstLabel').textContent = '未运行实例';
     return;
   }
   for (const inst of running) {
     const row = document.createElement('div');
-    row.className = 'inst-item' + (inst.name === state.active ? ' active' : '');
-    row.onclick = () => { state.active = inst.name; renderInstances(running, saved); reconnectStream(); refreshPrivacy(); };
+    row.className = 'inst-row' + (inst.name === state.active ? ' active' : '');
+    row.onclick = () => {
+      state.active = inst.name;
+      applyViewportShape(inst);
+      renderInstances(running, saved);
+      reconnectStream();
+      refreshPrivacy();
+    };
     row.innerHTML = `
       <div>
-        <div><strong>${inst.name}</strong> <span class="inst-meta">PID ${inst.pid} · ${inst.uptime_seconds}s</span></div>
-        <div class="inst-meta">hdc ${inst.hdc_target} · ${inst.display} · UDID ${(inst.udid||'').slice(0,12)}…</div>
+        <div class="row" style="gap:6px">
+          <strong>${inst.name}</strong>
+          <span class="tag">${(inst.profile || 'phone').toUpperCase()} · ${inst.width || 1080}×${inst.height || 2340}</span>
+        </div>
+        <div class="inst-sub mono">PID ${inst.pid} · hdc ${inst.hdc_target} · ${inst.net_mode || 'auto'} · ${inst.uptime_seconds}s</div>
       </div>
-      <button class="danger" onclick="event.stopPropagation(); stopInstance('${inst.name}')">停止</button>
+      <button class="btn sm danger" onclick="event.stopPropagation(); stopInstance('${inst.name}')">停止</button>
     `;
     el.appendChild(row);
   }
@@ -401,18 +646,20 @@ function reconnectStream() {
     img.src = '';
     img.style.display = 'none';
     empty.style.display = 'flex';
+    badge.className = 'tag';
     badge.textContent = '离线';
     return;
   }
   const fps = Number(document.getElementById('fpsSelect').value);
   empty.style.display = 'none';
   img.style.display = 'block';
+  badge.className = 'tag ok';
   if (fps > 0) {
     img.src = `/api/instances/${encodeURIComponent(state.active)}/stream?fps=${fps}&t=${Date.now()}`;
-    badge.textContent = `实时 ${fps} FPS`;
+    badge.textContent = `${fps} FPS`;
   } else {
     img.src = `/api/instances/${encodeURIComponent(state.active)}/screen.png?t=${Date.now()}`;
-    badge.textContent = '单帧模式';
+    badge.textContent = '单帧';
   }
 }
 
@@ -422,21 +669,20 @@ function refreshOneFrame() {
   document.getElementById('phoneEmpty').style.display = 'none';
   img.style.display = 'block';
   img.src = `/api/instances/${encodeURIComponent(state.active)}/screen.png?t=${Date.now()}`;
-  document.getElementById('streamState').textContent = '已刷新 PNG';
 }
 
 function downloadPng() {
   if (!state.active) return toast('请先启动实例');
   const a = document.createElement('a');
   a.href = `/api/instances/${encodeURIComponent(state.active)}/screen.png?t=${Date.now()}`;
-  a.download = `hmos7-${state.active}-${Date.now()}.png`;
+  a.download = `harmony-${state.active}-${Date.now()}.png`;
   a.click();
 }
 
 function pointerToGuest(e) {
   const rect = document.getElementById('phone').getBoundingClientRect();
-  const x = Math.max(0, Math.min(W, Math.round(((e.clientX - rect.left) / rect.width) * W)));
-  const y = Math.max(0, Math.min(H, Math.round(((e.clientY - rect.top) / rect.height) * H)));
+  const x = Math.max(0, Math.min(state.width, Math.round(((e.clientX - rect.left) / rect.width) * state.width)));
+  const y = Math.max(0, Math.min(state.height, Math.round(((e.clientY - rect.top) / rect.height) * state.height)));
   return { x, y, px: e.clientX - rect.left, py: e.clientY - rect.top };
 }
 
@@ -446,7 +692,7 @@ function spawnRipple(px, py) {
   r.style.left = px + 'px';
   r.style.top = py + 'px';
   document.getElementById('phone').appendChild(r);
-  setTimeout(() => r.remove(), 460);
+  setTimeout(() => r.remove(), 420);
 }
 
 const phoneEl = document.getElementById('phone');
@@ -478,14 +724,14 @@ phoneEl.addEventListener('pointerup', async e => {
 async function launchInstance() {
   const btn = document.getElementById('launchBtn');
   btn.disabled = true;
-  btn.textContent = '⏳ 启动中 (约 11~30s)...';
-  setOut('正在启动 HarmonyOS 7.0.0.107 QEMU 实例，等待 SceneBoard 就绪与自动解锁...');
+  btn.textContent = '启动中...';
   try {
     const res = await api('/api/instances/launch', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         instance: document.getElementById('launchName').value.trim() || 'default',
+        profile: document.getElementById('launchProfile').value,
         display: document.getElementById('launchDisplay').value,
         net_mode: document.getElementById('launchNet').value,
         peer: document.getElementById('launchPeer').value.trim() || 'off',
@@ -497,7 +743,7 @@ async function launchInstance() {
     });
     state.active = res.instance;
     setOut(JSON.stringify(res, null, 2));
-    toast(`实例 ${res.instance} 已就绪！`);
+    toast(`实例 ${res.instance} 已就绪`);
     await refreshStatus();
     reconnectStream();
   } catch (e) {
@@ -505,7 +751,7 @@ async function launchInstance() {
     toast('启动失败: ' + e.message, 4000);
   } finally {
     btn.disabled = false;
-    btn.textContent = '▶ 启动 / 复用实例';
+    btn.textContent = '启动实例';
   }
 }
 
@@ -548,18 +794,16 @@ async function sendAct(payload, label) {
       setOut(res.output || '(ok)');
     }
     if (Number(document.getElementById('fpsSelect').value) === 0) setTimeout(refreshOneFrame, 450);
-  } catch (e) {
-    toast('操作失败: ' + e.message, 3500);
-  }
+  } catch (e) { toast('操作失败: ' + e.message, 3500); }
 }
 
-function sendKey(key) { return sendAct({ action: 'key', key }, `Key: ${key}`); }
+function sendKey(key) { return sendAct({ action: 'key', key }, `按键: ${key}`); }
 function sendText() {
   const el = document.getElementById('textInput');
   if (!el.value) return;
   const txt = el.value;
   el.value = '';
-  sendAct({ action: 'text', text: txt }, `已输入文字`);
+  sendAct({ action: 'text', text: txt }, '已发送文本');
 }
 function launchApp(bundle, ability) {
   document.getElementById('customBundle').value = bundle;
@@ -580,7 +824,7 @@ async function installByPath() {
   if (!state.active) return toast('请先启动实例');
   const p = document.getElementById('hapPath').value.trim();
   if (!p) return toast('请输入 .hap 路径');
-  setOut(`正在签名并安装 ${p} ...`);
+  toast('正在签名并安装...');
   try {
     const res = await api(`/api/instances/${encodeURIComponent(state.active)}/install`, {
       method: 'POST',
@@ -592,7 +836,7 @@ async function installByPath() {
       }),
     });
     setOut(JSON.stringify(res, null, 2));
-    toast(`安装完成: ${res.bundle_name || p}`);
+    toast(`已安装 ${res.bundle_name || p}`);
   } catch (e) {
     setOut('安装失败:\n' + e.message);
     toast('安装失败: ' + e.message, 4000);
@@ -602,7 +846,7 @@ async function installByPath() {
 async function uploadHap(file) {
   if (!file) return;
   if (!state.active) return toast('请先启动实例');
-  setOut(`正在上传、签名并安装 ${file.name} (${(file.size/1048576).toFixed(1)} MB)...`);
+  toast(`正在上传并安装 ${file.name}...`);
   const fd = new FormData();
   fd.append('file', file);
   fd.append('sign', String(document.getElementById('signChk').checked));
@@ -610,7 +854,7 @@ async function uploadHap(file) {
   try {
     const res = await api(`/api/instances/${encodeURIComponent(state.active)}/install`, { method: 'POST', body: fd });
     setOut(JSON.stringify(res, null, 2));
-    toast(`安装完成: ${res.bundle_name || file.name}`);
+    toast(`已安装 ${res.bundle_name || file.name}`);
   } catch (e) {
     setOut('上传安装失败:\n' + e.message);
     toast('上传安装失败: ' + e.message, 4000);
@@ -631,8 +875,8 @@ async function refreshPrivacy() {
     const res = await api(`/api/instances/${encodeURIComponent(state.active)}/privacy`);
     state.privacyAutoAgree = !!res.auto_agree;
     const btn = document.getElementById('privacyBtn');
-    btn.className = state.privacyAutoAgree ? 'ok' : 'danger';
-    btn.textContent = `隐私自动同意: ${state.privacyAutoAgree ? '开 (已放行)' : '关 (未同意态)'}`;
+    btn.className = 'btn sm ' + (state.privacyAutoAgree ? 'primary' : 'danger');
+    btn.textContent = state.privacyAutoAgree ? '已开启' : '已关闭';
   } catch {}
 }
 
@@ -647,35 +891,48 @@ async function togglePrivacy() {
     });
     state.privacyAutoAgree = !!res.auto_agree;
     await refreshPrivacy();
-    setOut(JSON.stringify(res, null, 2));
-    toast(`隐私自动同意已切换为: ${next ? '开启' : '关闭'}（重启目标 App 生效）`);
+    toast(`隐私自动同意已${next ? '开启' : '关闭'}（重启 App 生效）`);
   } catch (e) { toast('切换失败: ' + e.message); }
 }
 
-function selectTab(tab) {
-  state.tab = tab;
-  document.querySelectorAll('.tab').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
-  const bar = document.getElementById('tabToolbar');
+async function saveConfig() {
+  try {
+    const res = await api('/api/config', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        images_dir: document.getElementById('cfgImagesDir').value.trim(),
+        instances_dir: document.getElementById('cfgInstancesDir').value.trim(),
+        hdc_path: document.getElementById('cfgHdcPath').value.trim(),
+      }),
+    });
+    document.getElementById('cfgPathNote').textContent = res.config_path || '';
+    toast('路径配置已保存并生效');
+    await refreshStatus();
+  } catch (e) { toast('保存失败: ' + e.message, 4000); }
+}
+
+function selectDebugTab(tab) {
+  state.debugTab = tab;
+  document.querySelectorAll('#debugTabs button').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
+  const bar = document.getElementById('debugToolbar');
   if (tab === 'hilog') {
     bar.innerHTML = `
-      <input id="hlBundle" placeholder="包名/进程 (如 top.frankhan.resk)" style="width:210px" />
-      <input id="hlGrep" placeholder="关键字过滤 (可选)" style="width:170px" />
-      <input id="hlLimit" type="number" value="100" style="width:70px" />
-      <button class="primary" onclick="runObserve('hilog')">拉取日志</button>
-      <button onclick="runObserve('hilog', true)">拉取并清空</button>
+      <input id="hlBundle" placeholder="包名或进程名" style="width:200px" />
+      <input id="hlGrep" placeholder="关键字过滤" style="width:160px" />
+      <input id="hlLimit" type="number" value="100" style="width:68px" />
+      <button class="btn primary sm" onclick="runObserve('hilog')">拉取</button>
+      <button class="btn sm" onclick="runObserve('hilog', true)">拉取并清空</button>
     `;
   } else if (tab === 'shell') {
     bar.innerHTML = `
-      <input id="shellCmd" placeholder="输入 hdc shell 命令 (如 param get const.product.software.version)" style="flex:1" onkeydown="if(event.key==='Enter')runShell()" />
-      <button class="primary" onclick="runShell()">执行</button>
-      <button onclick="runShell('ip addr; ip route; ls -la /dev/net/tun')">网络</button>
-      <button onclick="runShell('ps -ef | grep -E \"easytier|resk|sceneboard|render_service\"')">进程</button>
+      <input id="shellCmd" class="mono" placeholder="输入 hdc shell 命令" style="flex:1" onkeydown="if(event.key==='Enter')runShell()" />
+      <button class="btn primary sm" onclick="runShell()">执行</button>
+      <button class="btn sm" onclick="runShell('ip addr; ip route; ls -la /dev/net/tun')">网络</button>
+      <button class="btn sm" onclick="runShell('ps -ef | grep -E \"easytier|resk|sceneboard|render_service\"')">进程</button>
     `;
-  } else if (tab === 'mcp') {
-    bar.innerHTML = `<button class="primary" onclick="loadMcpInfo()">刷新 MCP 工具清单</button><button onclick="copyMcpUrl()">复制 MCP URL</button>`;
-    loadMcpInfo();
   } else {
-    bar.innerHTML = `<input id="obsGrep" placeholder="关键字过滤 (可选)" style="width:220px" /><button class="primary" onclick="runObserve('${tab}')">刷新 ${tab}</button>`;
+    bar.innerHTML = `<input id="obsGrep" placeholder="关键字过滤" style="width:220px" /><button class="btn primary sm" onclick="runObserve('${tab}')">刷新</button>`;
     if (state.active) runObserve(tab);
   }
 }
@@ -713,28 +970,21 @@ async function runShell(preset) {
 async function loadMcpInfo() {
   try {
     const res = await api('/api/mcp/tools');
-    const cfg = {
-      mcpServers: {
-        harmony_emulator: {
-          type: 'http',
-          url: res.mcp_url,
-        },
-      },
-    };
-    setOut(
-      `=== Fancy / MCP 接入配置 ===\n${JSON.stringify(cfg, null, 2)}\n\n` +
-      `=== 暴露工具 (${res.tools.length} 个) ===\n` +
-      res.tools.map(t => `- ${t.name}: ${t.description}`).join('\n')
-    );
-  } catch (e) { setOut('加载失败: ' + e.message); }
+    const cfg = { mcpServers: { harmony_emulator: { type: 'http', url: res.mcp_url } } };
+    document.getElementById('mcpSnippet').textContent =
+      JSON.stringify(cfg, null, 2) + '\n\n// 工具列表 (' + res.tools.length + ')\n' +
+      res.tools.map(t => `${t.name}  —  ${t.description}`).join('\n');
+  } catch (e) {
+    document.getElementById('mcpSnippet').textContent = '加载失败: ' + e.message;
+  }
 }
 
 function copyMcpUrl() {
-  const url = document.getElementById('mcpUrlText').textContent;
+  const url = state.status?.mcp_url || 'http://127.0.0.1:18555/mcp';
   navigator.clipboard?.writeText(url).then(() => toast('已复制 ' + url));
 }
 
-selectTab('hilog');
+selectDebugTab('hilog');
 refreshStatus();
 setInterval(refreshStatus, 6000);
 </script>

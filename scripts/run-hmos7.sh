@@ -27,14 +27,27 @@ resolve_dir() {
     printf '%s' "$1"
 }
 
-KERNEL="${HMOS7_KERNEL:-$(resolve_file "$ROOT/images/kernel/Image" "$ROOT/out/kernel/Image")}"
-INITRD="${HMOS7_INITRD:-$(resolve_file "$ROOT/images/initramfs.cpio.gz" "$ROOT/out/initramfs.cpio.gz")}"
-OVERLAY_IMG="${HMOS7_OVERLAY_IMG:-$(resolve_file "$ROOT/images/qemu_overlay.img" "$ROOT/out/qemu_overlay.img")}"
-PROVISIONED_IMG="${HMOS7_PROVISIONED_IMG:-$(resolve_file "$ROOT/images/userdata-provisioned.img" "$ROOT/out/userdata-provisioned.img")}"
-DONOR_IMGS="${HMOS7_DONOR_IMGS:-$(resolve_dir "$ROOT/images/donor" "$ROOT/donor/pura70proplus-7.0.0.107/images")}"
+PROFILE="${HMOS7_PROFILE:-phone}"       # phone | pc
+IMAGES_DIR="${HMOS7_IMAGES_DIR:-$ROOT/images}"
+INSTANCES_DIR="${HMOS7_INSTANCES_DIR:-$ROOT/instances}"
+PROF_DIR="$IMAGES_DIR/$PROFILE"
+
+if [ "$PROFILE" = "pc" ]; then
+    DEFAULT_W=1920; DEFAULT_H=1080; DEFAULT_MEM=8192; DEFAULT_DATA_GB=16
+    PROVISIONED_IMG="${HMOS7_PROVISIONED_IMG:-$PROF_DIR/userdata-provisioned.img}"
+    DONOR_IMGS="${HMOS7_DONOR_IMGS:-$PROF_DIR/donor}"
+else
+    DEFAULT_W=1080; DEFAULT_H=2340; DEFAULT_MEM=6144; DEFAULT_DATA_GB=4
+    PROVISIONED_IMG="${HMOS7_PROVISIONED_IMG:-$(resolve_file "$PROF_DIR/userdata-provisioned.img" "$IMAGES_DIR/userdata-provisioned.img" "$IMAGES_DIR/out/userdata-provisioned.img" "$ROOT/images/userdata-provisioned.img" "$ROOT/out/userdata-provisioned.img")}"
+    DONOR_IMGS="${HMOS7_DONOR_IMGS:-$(resolve_dir "$PROF_DIR/donor" "$IMAGES_DIR/donor" "$IMAGES_DIR/donor/pura70proplus-7.0.0.107/images" "$ROOT/images/donor" "$ROOT/donor/pura70proplus-7.0.0.107/images")}"
+fi
+
+KERNEL="${HMOS7_KERNEL:-$(resolve_file "$PROF_DIR/kernel/Image" "$IMAGES_DIR/kernel/Image" "$IMAGES_DIR/out/kernel/Image" "$ROOT/images/kernel/Image" "$ROOT/out/kernel/Image")}"
+INITRD="${HMOS7_INITRD:-$(resolve_file "$PROF_DIR/initramfs.cpio.gz" "$IMAGES_DIR/initramfs.cpio.gz" "$IMAGES_DIR/out/initramfs.cpio.gz" "$ROOT/images/initramfs.cpio.gz" "$ROOT/out/initramfs.cpio.gz")}"
+OVERLAY_IMG="${HMOS7_OVERLAY_IMG:-$(resolve_file "$PROF_DIR/qemu_overlay.img" "$IMAGES_DIR/qemu_overlay.img" "$IMAGES_DIR/out/qemu_overlay.img" "$ROOT/images/qemu_overlay.img" "$ROOT/out/qemu_overlay.img")}"
 
 INSTANCE="${HMOS7_INSTANCE:-default}"
-INST_DIR="$ROOT/instances/$INSTANCE"
+INST_DIR="$INSTANCES_DIR/$INSTANCE"
 USERDATA_IMG="$INST_DIR/userdata.img"
 
 HDC_PORT="${HMOS7_HDC_PORT:-5555}"
@@ -42,10 +55,10 @@ SERIAL_PORT="${HMOS7_SERIAL_PORT:-}"
 SHELL_PORT="${HMOS7_SHELL_PORT:-5556}"
 DISPLAY_MODE="${HMOS7_DISPLAY:-none}"   # none | vnc | cocoa (macOS) | gtk | sdl (Linux)
 VNC_DISPLAY="${HMOS7_VNC_DISPLAY:-21}"
-MEMORY="${HMOS7_MEMORY:-6144}"
+MEMORY="${HMOS7_MEMORY:-$DEFAULT_MEM}"
 SMP="${HMOS7_SMP:-4}"
-WIDTH="${HMOS7_WIDTH:-1080}"
-HEIGHT="${HMOS7_HEIGHT:-2340}"
+WIDTH="${HMOS7_WIDTH:-$DEFAULT_W}"
+HEIGHT="${HMOS7_HEIGHT:-$DEFAULT_H}"
 RESET_DATA="${HMOS7_RESET:-0}"
 EXTRA_CMDLINE="${HMOS7_CMDLINE:-}"
 PEER_MODE="${HMOS7_PEER:-off}"          # off | listen[:PORT] | connect[:PORT]
@@ -76,9 +89,9 @@ if [ "$RESET_DATA" = "1" ] || [ ! -f "$USERDATA_IMG" ]; then
         fi
     else
         if command -v truncate >/dev/null 2>&1; then
-            truncate -s 4G "$USERDATA_IMG"
+            truncate -s "${DEFAULT_DATA_GB}G" "$USERDATA_IMG"
         else
-            python3 -c "open('$USERDATA_IMG', 'wb').truncate(4 * 1024 * 1024 * 1024)"
+            python3 -c "open('$USERDATA_IMG', 'wb').truncate(${DEFAULT_DATA_GB} * 1024 * 1024 * 1024)"
         fi
     fi
 fi
@@ -108,9 +121,9 @@ fi
 DISPLAY_ARGS=(-display none)
 case "$DISPLAY_MODE" in
     none) DISPLAY_ARGS=(-display none) ;;
-    cocoa) DISPLAY_ARGS=(-display cocoa) ;;
-    gtk) DISPLAY_ARGS=(-display gtk) ;;
-    sdl) DISPLAY_ARGS=(-display sdl) ;;
+    cocoa) DISPLAY_ARGS=(-display "cocoa,full-grab=off,show-cursor=on,zoom-to-fit=on") ;;
+    gtk) DISPLAY_ARGS=(-display "gtk,grab-on-hover=off,show-cursor=on,zoom-to-fit=on") ;;
+    sdl) DISPLAY_ARGS=(-display "sdl,show-cursor=on") ;;
     vnc) DISPLAY_ARGS=(-display "vnc=127.0.0.1:${VNC_DISPLAY}") ;;
     *) echo "Unknown display mode: $DISPLAY_MODE" >&2; exit 2 ;;
 esac

@@ -77,7 +77,9 @@ done
 mount_ro() {
     dev=$1; name=$2; fstype=$3
     mkdir -p "/hmos/$name"
-    mount -t "$fstype" -o ro "/dev/$dev" "/hmos/$name" || hold "failed to mount /dev/$dev ($name, $fstype)"
+    mount -t "$fstype" -o ro "/dev/$dev" "/hmos/$name" 2>/dev/null \
+      || mount -t ext4 -o ro,noload "/dev/$dev" "/hmos/$name" 2>/dev/null \
+      || hold "failed to mount /dev/$dev ($name, $fstype/ext4)"
 }
 mount_ro vda system erofs
 mount_ro vdb vendor erofs

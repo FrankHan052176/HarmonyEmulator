@@ -6,6 +6,7 @@ dist/
 tools/
 signing/
 .cache/
+config.json
 *.tar.gz
 *.tar.zst
 *.sha256

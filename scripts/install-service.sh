@@ -27,13 +27,21 @@ fi
 
 OS="$(uname -s)"
 if [ "$OS" = "Darwin" ]; then
-    # Copy binary onto local user disk so macOS launchd is never blocked by external-volume TCC
-    LOCAL_DIR="$HOME/Data/harmony-emulator-dashboard"
-    mkdir -p "$LOCAL_DIR" "$HOME/Library/LaunchAgents"
-    rm -f "$LOCAL_DIR/harmony-emulator-dashboard"
-    cp "$SRC_BIN" "$LOCAL_DIR/harmony-emulator-dashboard"
-    chmod +x "$LOCAL_DIR/harmony-emulator-dashboard"
-    codesign --force --sign - "$LOCAL_DIR/harmony-emulator-dashboard" 2>/dev/null || true
+    mkdir -p "$HOME/Library/LaunchAgents" "$ROOT/logs"
+    # If the project already lives on internal disk, run directly from $ROOT/bin;
+    # only copy to ~/Data when $ROOT is on an external /Volumes/* mount.
+    if [[ "$ROOT" == /Volumes/* ]]; then
+        LOCAL_DIR="$HOME/Data/harmony-emulator-dashboard"
+        mkdir -p "$LOCAL_DIR"
+        rm -f "$LOCAL_DIR/harmony-emulator-dashboard"
+        cp "$SRC_BIN" "$LOCAL_DIR/harmony-emulator-dashboard"
+        chmod +x "$LOCAL_DIR/harmony-emulator-dashboard"
+        RUN_BIN="$LOCAL_DIR/harmony-emulator-dashboard"
+        LOG_PATH="$LOCAL_DIR/dashboard.log"
+    else
+        RUN_BIN="$SRC_BIN"
+        LOG_PATH="$ROOT/logs/dashboard.log"
+    fi
 
     PLIST="$HOME/Library/LaunchAgents/com.hmos7.emulator.dashboard.plist"
     cat > "$PLIST" <<PLIST
@@ -45,7 +53,7 @@ if [ "$OS" = "Darwin" ]; then
   <string>com.hmos7.emulator.dashboard</string>
   <key>ProgramArguments</key>
   <array>
-    <string>${LOCAL_DIR}/harmony-emulator-dashboard</string>
+    <string>${RUN_BIN}</string>
     <string>--listen</string>
     <string>${LISTEN}</string>
     <string>--root</string>
@@ -63,9 +71,9 @@ if [ "$OS" = "Darwin" ]; then
   <key>KeepAlive</key>
   <true/>
   <key>StandardOutPath</key>
-  <string>${LOCAL_DIR}/dashboard.log</string>
+  <string>${LOG_PATH}</string>
   <key>StandardErrorPath</key>
-  <string>${LOCAL_DIR}/dashboard.log</string>
+  <string>${LOG_PATH}</string>
 </dict>
 </plist>
 PLIST

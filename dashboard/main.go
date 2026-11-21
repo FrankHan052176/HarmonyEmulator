@@ -29,6 +29,8 @@ func main() {
 	}
 	listen := flag.String("listen", defaultListen, "HTTP listen address")
 	root := flag.String("root", "", "HarmonyEmulator workspace root (default HMOS7_ROOT or auto-detected)")
+	imagesDir := flag.String("images-dir", "", "Custom runtime images directory (default config.json, HMOS7_IMAGES_DIR, or <root>/images)")
+	instancesDir := flag.String("instances-dir", "", "Custom VM instances directory (default config.json, HMOS7_INSTANCES_DIR, or <root>/instances)")
 	hdc := flag.String("hdc", "", "Path to HarmonyOS hdc binary")
 	flag.Parse()
 
@@ -36,7 +38,7 @@ func main() {
 	if strings.HasPrefix(*listen, ":") {
 		baseURL = "http://127.0.0.1" + *listen
 	}
-	mgr := NewManager(*root, *hdc, baseURL)
+	mgr := NewManager(*root, *hdc, baseURL, *imagesDir, *instancesDir)
 
 	mux := http.NewServeMux()
 	// MCP Streamable HTTP endpoint for Fancy & other LLM clients
@@ -48,6 +50,22 @@ func main() {
 	})
 	mux.HandleFunc("GET /api/status", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, mgr.Status(r.URL.Query().Get("instance")))
+	})
+	mux.HandleFunc("GET /api/config", func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, http.StatusOK, mgr.GetConfig())
+	})
+	mux.HandleFunc("POST /api/config", func(w http.ResponseWriter, r *http.Request) {
+		var req StorageConfig
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			writeErr(w, http.StatusBadRequest, err)
+			return
+		}
+		cfg, err := mgr.UpdateConfig(req)
+		if err != nil {
+			writeErr(w, http.StatusBadRequest, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, cfg)
 	})
 	mux.HandleFunc("GET /api/mcp/tools", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]any{"mcp_url": baseURL + "/mcp", "tools": mcpToolDefs()})
