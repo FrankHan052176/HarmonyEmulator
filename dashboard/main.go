@@ -25,7 +25,7 @@ var webFS embed.FS
 func main() {
 	defaultListen := strings.TrimSpace(os.Getenv("HMOS7_DASHBOARD_LISTEN"))
 	if defaultListen == "" {
-		defaultListen = "127.0.0.1:18555"
+		defaultListen = "0.0.0.0:18555"
 	}
 	listen := flag.String("listen", defaultListen, "HTTP listen address")
 	root := flag.String("root", "", "HarmonyEmulator workspace root (default HMOS7_ROOT or auto-detected)")
@@ -37,6 +37,10 @@ func main() {
 	baseURL := "http://" + *listen
 	if strings.HasPrefix(*listen, ":") {
 		baseURL = "http://127.0.0.1" + *listen
+	} else if strings.HasPrefix(*listen, "0.0.0.0:") {
+		baseURL = "http://127.0.0.1:" + strings.TrimPrefix(*listen, "0.0.0.0:")
+	} else if strings.HasPrefix(*listen, "[::]:") {
+		baseURL = "http://127.0.0.1:" + strings.TrimPrefix(*listen, "[::]:")
 	}
 	mgr := NewManager(*root, *hdc, baseURL, *imagesDir, *instancesDir)
 
